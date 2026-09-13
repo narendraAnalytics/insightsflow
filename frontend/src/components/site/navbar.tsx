@@ -4,7 +4,7 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, CaretDown, List, X } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
-import { InsightFlowMark } from "@/components/site/brand-icons";
+import { LogoVideo } from "@/components/site/logo-video";
 
 const primaryLinks = [
   { label: "Product", href: "#product" },
@@ -32,7 +32,7 @@ export function Navbar() {
         className="glass-panel flex w-full max-w-6xl items-center justify-between gap-4 rounded-full px-4 py-2.5 sm:px-5"
       >
         <a href="#top" className="flex items-center gap-2.5">
-          <InsightFlowMark className="h-9 w-9" />
+          <LogoVideo className="h-9 w-9" />
           <span className="flex flex-col leading-none">
             <span className="text-[17px] font-semibold tracking-tight text-(--flow-ink)">InsightFlow</span>
             <span className="text-[10.5px] font-medium text-muted-foreground">Connect. Understand. Act.</span>

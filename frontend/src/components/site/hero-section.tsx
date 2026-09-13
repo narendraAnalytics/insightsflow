@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, type Variants } from "framer-motion";
 import { ArrowRight, CaretDown, Lightning, Play, Shield, Sparkle, Users } from "@phosphor-icons/react";
 import { GitHubGlyph, GoogleDriveGlyph, LinearGlyph, NotionGlyph, SlackGlyph } from "@/components/site/brand-icons";
 
@@ -18,12 +18,12 @@ const trustLogos = [
   { icon: LinearGlyph, label: "Linear" },
 ];
 
-const container = {
+const container: Variants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.09, delayChildren: 0.15 } },
 };
 
-const item = {
+const item: Variants = {
   hidden: { opacity: 0, y: 18 },
   show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] } },
 };
@@ -33,7 +33,7 @@ export function HeroSection() {
     <section id="top" className="relative isolate overflow-hidden pt-28 pb-20 sm:pt-32 lg:pb-28">
       <div className="absolute inset-0 -z-20 overflow-hidden">
         <video
-          className="h-full w-full object-cover"
+          className="h-full w-full object-cover brightness-[1.10]"
           autoPlay
           muted
           loop
