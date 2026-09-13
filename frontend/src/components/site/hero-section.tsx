@@ -33,7 +33,7 @@ export function HeroSection() {
     <section id="top" className="relative isolate overflow-hidden pt-28 pb-20 sm:pt-32 lg:pb-28">
       <div className="absolute inset-0 -z-20 overflow-hidden">
         <video
-          className="h-full w-full object-cover brightness-[1.10]"
+          className="h-full w-full object-cover opacity-100 brightness-[1.10]"
           autoPlay
           muted
           loop
