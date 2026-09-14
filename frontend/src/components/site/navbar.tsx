@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, CaretDown, List, X } from "@phosphor-icons/react";
+import { Show, SignInButton, SignUpButton, UserButton, useUser } from "@clerk/nextjs";
 import { cn } from "@/lib/utils";
 import { LogoVideo } from "@/components/site/logo-video";
 
@@ -22,6 +23,8 @@ const resourceLinks = [
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [resourcesOpen, setResourcesOpen] = useState(false);
+  const { user } = useUser();
+  const displayName = user?.username ?? user?.firstName ?? "there";
 
   return (
     <header className="fixed inset-x-0 top-0 z-50 flex justify-center px-4 pt-4 sm:px-6">
@@ -87,19 +90,31 @@ export function Navbar() {
         </nav>
 
         <div className="hidden items-center gap-2 lg:flex">
-          <a
-            href="/sign-in"
-            className="rounded-full px-4 py-2 text-sm font-semibold text-(--flow-ink) transition-colors hover:bg-white/50"
-          >
-            Sign in
-          </a>
-          <a
-            href="/get-started"
-            className="bg-gradient-flow group inline-flex items-center gap-1.5 rounded-full px-4 py-2.5 text-sm font-semibold text-(--flow-cream) shadow-[0_8px_20px_-6px_rgba(224,90,143,0.55)] transition-transform hover:scale-[1.03] active:scale-[0.98]"
-          >
-            Get Started
-            <ArrowRight weight="bold" className="size-3.5 transition-transform group-hover:translate-x-0.5" />
-          </a>
+          <Show when="signed-out">
+            <SignInButton mode="redirect">
+              <button
+                type="button"
+                className="rounded-full px-4 py-2 text-sm font-semibold text-(--flow-ink) transition-colors hover:bg-white/50"
+              >
+                Sign in
+              </button>
+            </SignInButton>
+            <SignUpButton mode="redirect" forceRedirectUrl="/">
+              <button
+                type="button"
+                className="bg-gradient-flow group inline-flex items-center gap-1.5 rounded-full px-4 py-2.5 text-sm font-semibold text-(--flow-cream) shadow-[0_8px_20px_-6px_rgba(224,90,143,0.55)] transition-transform hover:scale-[1.03] active:scale-[0.98]"
+              >
+                Get Started
+                <ArrowRight weight="bold" className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+              </button>
+            </SignUpButton>
+          </Show>
+          <Show when="signed-in">
+            <span className="px-2 text-sm font-semibold text-(--flow-ink)">
+              Welcome, <span className="text-gradient-flow">{displayName}</span>
+            </span>
+            <UserButton />
+          </Show>
         </div>
 
         <button
@@ -135,21 +150,32 @@ export function Navbar() {
               </a>
             ))}
             <div className="mt-1 flex flex-col gap-2 border-t border-white/60 pt-3">
-              <a
-                href="/sign-in"
-                onClick={() => setMobileOpen(false)}
-                className="rounded-2xl px-4 py-2.5 text-center text-[15px] font-semibold text-(--flow-ink)"
-              >
-                Sign in
-              </a>
-              <a
-                href="/get-started"
-                onClick={() => setMobileOpen(false)}
-                className="bg-gradient-flow inline-flex items-center justify-center gap-1.5 rounded-2xl px-4 py-3 text-[15px] font-semibold text-(--flow-cream)"
-              >
-                Get Started
-                <ArrowRight weight="bold" className="size-4" />
-              </a>
+              <Show when="signed-out">
+                <SignInButton mode="redirect">
+                  <button
+                    type="button"
+                    onClick={() => setMobileOpen(false)}
+                    className="rounded-2xl px-4 py-2.5 text-center text-[15px] font-semibold text-(--flow-ink)"
+                  >
+                    Sign in
+                  </button>
+                </SignInButton>
+                <SignUpButton mode="redirect" forceRedirectUrl="/">
+                  <button
+                    type="button"
+                    onClick={() => setMobileOpen(false)}
+                    className="bg-gradient-flow inline-flex items-center justify-center gap-1.5 rounded-2xl px-4 py-3 text-[15px] font-semibold text-(--flow-cream)"
+                  >
+                    Get Started
+                    <ArrowRight weight="bold" className="size-4" />
+                  </button>
+                </SignUpButton>
+              </Show>
+              <Show when="signed-in">
+                <span className="text-center text-[15px] font-semibold text-(--flow-ink)">
+                  Welcome, <span className="text-gradient-flow">{displayName}</span>
+                </span>
+              </Show>
             </div>
           </motion.div>
         )}

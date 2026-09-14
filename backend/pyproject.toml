@@ -25,12 +25,16 @@ dependencies = [
     "sentry-sdk[fastapi]>=2.20.0",
     "sqlalchemy>=2.0.52",
     "structlog>=26.1.0",
+    "svix>=1.78.0",
     "tenacity>=9.0.0",
     "uvicorn>=0.52.4",
 ]
 
 # NOTE on phased dependencies (see roadmap.txt):
-#   Phase 1 (Clerk)        -> clerk-backend-api
+#   Phase 1 (Clerk)        -> svix (webhook verification, added now);
+#                             clerk-backend-api (JWT/JWKS auth) -> added
+#                             when full Phase 1 (get_current_principal, orgs,
+#                             roles) is implemented
 #   Phase 2 (Razorpay)     -> razorpay
 #   Phase 3 (integrations) -> google-api-python-client, google-auth,
 #                             google-auth-oauthlib, notion-client, slack-sdk

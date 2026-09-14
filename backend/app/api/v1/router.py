@@ -5,6 +5,8 @@ runs, insights, billing, webhooks/...)."""
 from fastapi import APIRouter
 
 from app.api.v1 import health
+from app.api.v1.webhooks import clerk as clerk_webhooks
 
 api_router = APIRouter()
 api_router.include_router(health.router)
+api_router.include_router(clerk_webhooks.router)

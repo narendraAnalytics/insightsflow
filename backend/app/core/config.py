@@ -37,6 +37,10 @@ class Settings(BaseSettings):
 
     redis_url: str = "redis://localhost:6379/0"
 
+    # Clerk webhook (Svix-signed) -> upserts users into Neon. Full JWT-verified
+    # API auth (get_current_principal, JWKS, orgs, roles) is later Phase 1 scope.
+    clerk_webhook_secret: str | None = None
+
     sentry_dsn: str | None = None
 
     @field_validator("cors_origins")

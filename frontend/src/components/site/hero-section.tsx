@@ -2,6 +2,7 @@
 
 import { motion, type Variants } from "framer-motion";
 import { ArrowRight, CaretDown, Lightning, Play, Shield, Sparkle, Users } from "@phosphor-icons/react";
+import { Show, SignUpButton, useUser } from "@clerk/nextjs";
 import { GitHubGlyph, GoogleDriveGlyph, LinearGlyph, NotionGlyph, SlackGlyph } from "@/components/site/brand-icons";
 
 const trustBadges = [
@@ -29,6 +30,9 @@ const item: Variants = {
 };
 
 export function HeroSection() {
+  const { user } = useUser();
+  const displayName = user?.username ?? user?.firstName ?? "there";
+
   return (
     <section id="top" className="relative isolate overflow-hidden pt-28 pb-20 sm:pt-32 lg:pb-28">
       <div className="absolute inset-0 -z-20 overflow-hidden">
@@ -79,13 +83,22 @@ export function HeroSection() {
           </motion.p>
 
           <motion.div variants={item} className="mt-8 flex flex-wrap items-center gap-3">
-            <a
-              href="/get-started"
-              className="bg-gradient-flow group inline-flex items-center gap-2 rounded-full px-6 py-3.5 text-[15px] font-semibold text-(--flow-cream) shadow-[0_16px_32px_-12px_rgba(224,90,143,0.55)] transition-transform hover:scale-[1.03] active:scale-[0.98]"
-            >
-              Start for Free
-              <ArrowRight weight="bold" className="size-4 transition-transform group-hover:translate-x-0.5" />
-            </a>
+            <Show when="signed-out">
+              <SignUpButton mode="redirect" forceRedirectUrl="/">
+                <button
+                  type="button"
+                  className="bg-gradient-flow group inline-flex items-center gap-2 rounded-full px-6 py-3.5 text-[15px] font-semibold text-(--flow-cream) shadow-[0_16px_32px_-12px_rgba(224,90,143,0.55)] transition-transform hover:scale-[1.03] active:scale-[0.98]"
+                >
+                  Start for Free
+                  <ArrowRight weight="bold" className="size-4 transition-transform group-hover:translate-x-0.5" />
+                </button>
+              </SignUpButton>
+            </Show>
+            <Show when="signed-in">
+              <span className="glass-panel inline-flex items-center gap-2 rounded-full px-6 py-3.5 text-[15px] font-semibold text-(--flow-ink)">
+                Welcome back, <span className="text-gradient-flow">{displayName}</span>
+              </span>
+            </Show>
             <a
               href="#how-it-works"
               className="glass-panel inline-flex items-center gap-2.5 rounded-full px-5 py-3.5 text-[15px] font-semibold text-(--flow-ink) transition-transform hover:scale-[1.02] active:scale-[0.98]"

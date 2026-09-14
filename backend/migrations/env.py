@@ -13,9 +13,8 @@ from app.db.base import Base
 apply_windows_asyncio_fix()  # must run before asyncio.run() below (Windows dev)
 
 # Import every model module here so Base.metadata is fully populated before
-# autogenerate runs. Empty for now (Phase 0) — Phase 1 adds
-# app.db.models.org, app.db.models.user, etc.
-# from app.db.models import org, user  # noqa: F401
+# autogenerate runs.
+from app.db.models import user  # noqa: F401, E402
 
 config = context.config
 
