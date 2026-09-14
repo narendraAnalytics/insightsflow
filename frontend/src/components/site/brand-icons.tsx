@@ -85,3 +85,39 @@ export function LinearGlyph(props: SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+export function GmailGlyph(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" {...props}>
+      <rect x="1.5" y="4.5" width="21" height="15" rx="2.4" fill="#fdf3ea" stroke="#e7ded3" />
+      <path d="M2.8 6 12 13l9.2-7" stroke="#ea4335" strokeWidth="2" fill="none" strokeLinecap="round" />
+      <path d="M2.4 6.4v11.3l6.2-4.8Z" fill="#34a853" />
+      <path d="M21.6 6.4v11.3l-6.2-4.8Z" fill="#fbbc04" />
+    </svg>
+  );
+}
+
+export function GoogleCalendarGlyph(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" {...props}>
+      <rect x="2.5" y="4" width="19" height="17" rx="3" fill="#fdf3ea" stroke="#e7ded3" />
+      <rect x="2.5" y="4" width="19" height="5" rx="2.4" fill="#4285f4" />
+      <text x="12" y="17.5" textAnchor="middle" fontSize="9" fontWeight="700" fill="#4285f4" fontFamily="sans-serif">
+        31
+      </text>
+      <rect x="7" y="2.2" width="1.8" height="4" rx="0.9" fill="#8a8a8a" />
+      <rect x="15.2" y="2.2" width="1.8" height="4" rx="0.9" fill="#8a8a8a" />
+    </svg>
+  );
+}
+
+export function GoogleSheetsGlyph(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" {...props}>
+      <path d="M6 2.2h8.4L19 6.8V21a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3.2a1 1 0 0 1 1-1Z" fill="#0f9d58" />
+      <path d="M14.4 2.2 19 6.8h-3.6a1 1 0 0 1-1-1Z" fill="#0b8043" />
+      <rect x="7.2" y="9.6" width="9.6" height="9.2" rx="0.6" fill="#fdf3ea" />
+      <path d="M7.2 12.7h9.6M7.2 15.8h9.6M11.2 9.6v9.2M13.2 9.6v9.2" stroke="#0f9d58" strokeWidth="0.8" />
+    </svg>
+  );
+}
