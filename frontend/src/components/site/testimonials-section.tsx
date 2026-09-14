@@ -10,6 +10,7 @@ const testimonials = [
     role: "Product Manager",
     quote: "InsightFlow helps us see the bigger picture across all our tools. It's like having an AI teammate.",
     initials: "SC",
+    accent: "var(--flow-magenta)",
     gradient: "linear-gradient(135deg, var(--flow-magenta), var(--flow-pink))",
   },
   {
@@ -17,6 +18,7 @@ const testimonials = [
     role: "Founder",
     quote: "We save hours every week. The insights are surprisingly accurate and actually useful.",
     initials: "AR",
+    accent: "var(--flow-coral)",
     gradient: "linear-gradient(135deg, var(--flow-coral), var(--flow-magenta))",
   },
   {
@@ -24,6 +26,7 @@ const testimonials = [
     role: "Engineering Lead",
     quote: "Finally, all our tools make sense together. InsightFlow is a genuine game changer.",
     initials: "PS",
+    accent: "var(--flow-cyan)",
     gradient: "linear-gradient(135deg, var(--flow-cyan), var(--flow-lavender))",
   },
 ];
@@ -66,37 +69,56 @@ export function TestimonialsSection() {
           See what builders, teams and creators say about InsightFlow.
         </motion.p>
 
-        <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {testimonials.map((testimonial) => (
-            <motion.div
-              key={testimonial.name}
-              variants={sectionItem}
-              whileHover={{ y: -6 }}
-              transition={{ type: "spring", stiffness: 300, damping: 20 }}
-              className="glass-card flex flex-col items-start rounded-3xl p-6 text-left"
-            >
-              <Quotes weight="fill" className="size-6 text-(--flow-magenta)/40" />
-              <p className="mt-3 text-[14.5px] leading-relaxed text-(--flow-ink)/80">&ldquo;{testimonial.quote}&rdquo;</p>
-              <div className="mt-5 flex items-center gap-3">
+        <motion.div
+          variants={sectionItem}
+          className="group relative mt-12 overflow-hidden mask-[linear-gradient(to_right,transparent,black_8%,black_92%,transparent)]"
+        >
+          <div className="animate-marquee flex w-max gap-5 group-hover:paused">
+            {[...testimonials, ...testimonials].map((testimonial, i) => (
+              <div
+                key={`${testimonial.name}-${i}`}
+                className="glass-card relative flex w-[320px] shrink-0 flex-col items-start overflow-hidden rounded-3xl p-6 text-left transition-transform hover:-translate-y-1.5 sm:w-[360px]"
+                style={{
+                  boxShadow: `0 18px 40px -24px color-mix(in oklab, ${testimonial.accent} 55%, transparent)`,
+                }}
+              >
                 <span
-                  className="flex size-10 shrink-0 items-center justify-center rounded-full text-[12px] font-bold text-(--flow-cream)"
+                  aria-hidden="true"
+                  className="absolute inset-x-0 top-0 h-1"
                   style={{ backgroundImage: testimonial.gradient }}
-                >
-                  {testimonial.initials}
-                </span>
-                <div>
-                  <p className="text-[13.5px] font-semibold text-(--flow-ink)">{testimonial.name}</p>
-                  <p className="text-[12px] text-(--flow-ink)/55">{testimonial.role}</p>
+                />
+                <span
+                  aria-hidden="true"
+                  className="absolute inset-0 -z-10"
+                  style={{
+                    backgroundImage: `radial-gradient(120% 100% at 0% 0%, color-mix(in oklab, ${testimonial.accent} 16%, transparent) 0%, transparent 60%)`,
+                  }}
+                />
+                <Quotes weight="fill" className="size-6" style={{ color: `color-mix(in oklab, ${testimonial.accent} 55%, transparent)` }} />
+                <p className="mt-3 text-[14.5px] leading-relaxed text-(--flow-ink)/80">
+                  &ldquo;{testimonial.quote}&rdquo;
+                </p>
+                <div className="mt-5 flex items-center gap-3">
+                  <span
+                    className="flex size-10 shrink-0 items-center justify-center rounded-full text-[12px] font-bold text-(--flow-cream)"
+                    style={{ backgroundImage: testimonial.gradient }}
+                  >
+                    {testimonial.initials}
+                  </span>
+                  <div>
+                    <p className="text-[13.5px] font-semibold text-(--flow-ink)">{testimonial.name}</p>
+                    <p className="text-[12px] text-(--flow-ink)/55">{testimonial.role}</p>
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center gap-0.5">
+                  {Array.from({ length: 5 }).map((_, star) => (
+                    <Star key={star} weight="fill" className="size-3.5" style={{ color: testimonial.accent }} />
+                  ))}
                 </div>
               </div>
-              <div className="mt-3 flex items-center gap-0.5">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <Star key={i} weight="fill" className="size-3.5 text-(--flow-coral)" />
-                ))}
-              </div>
-            </motion.div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </motion.div>
       </motion.div>
     </section>
   );

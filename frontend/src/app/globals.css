@@ -62,6 +62,7 @@
   --animate-sparkle: sparkle 2.6s ease-in-out infinite;
   --animate-pulse-glow: pulse-glow 4s ease-in-out infinite;
   --animate-flow-line: flow-line 3.2s linear infinite;
+  --animate-marquee: marquee 28s linear infinite;
 }
 
 :root {
@@ -233,6 +234,12 @@
 @keyframes flow-line {
   to {
     stroke-dashoffset: -24;
+  }
+}
+
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
   }
 }
 
