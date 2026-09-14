@@ -6,6 +6,7 @@ import { ArrowRight, CaretDown, List, X } from "@phosphor-icons/react";
 import { Show, SignInButton, SignUpButton, UserButton, useUser } from "@clerk/nextjs";
 import { cn } from "@/lib/utils";
 import { LogoVideo } from "@/components/site/logo-video";
+import { useBackendMe } from "@/hooks/use-backend-me";
 
 const primaryLinks = [
   { label: "Product", href: "#product" },
@@ -25,6 +26,7 @@ export function Navbar() {
   const [resourcesOpen, setResourcesOpen] = useState(false);
   const { user } = useUser();
   const displayName = user?.username ?? user?.firstName ?? "there";
+  const { me, error: backendError } = useBackendMe();
 
   return (
     <header className="fixed inset-x-0 top-0 z-50 flex justify-center px-4 pt-4 sm:px-6">
@@ -110,8 +112,21 @@ export function Navbar() {
             </SignUpButton>
           </Show>
           <Show when="signed-in">
-            <span className="px-2 text-sm font-semibold text-(--flow-ink)">
+            <span className="flex items-center gap-1.5 px-2 text-sm font-semibold text-(--flow-ink)">
               Welcome, <span className="text-gradient-flow">{displayName}</span>
+              <span
+                className={cn(
+                  "size-1.5 rounded-full",
+                  me ? "bg-(--flow-cyan)" : backendError ? "bg-(--flow-coral)" : "bg-(--flow-ink)/20"
+                )}
+                title={
+                  me
+                    ? `Backend connected (user_id: ${me.user_id})`
+                    : backendError
+                      ? `Backend call failed: ${backendError}`
+                      : "Connecting to backend…"
+                }
+              />
             </span>
             <UserButton />
           </Show>
