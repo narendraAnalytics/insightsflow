@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.20.0",
     "celery>=5.6.3",
+    "clerk-backend-api>=7.0.0",
     "duckdb>=1.5.1",
     "fastapi[standard]>=0.141.1",
     "httpx>=0.28.1",
@@ -58,6 +59,11 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's Depends()/Query()/etc. in argument defaults is the documented
+# idiom, not the mutable-default-argument bug B008 flags.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body"]
 
 [tool.mypy]
 python_version = "3.12"
