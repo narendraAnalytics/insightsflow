@@ -89,3 +89,14 @@ def test_group_by_headline_has_words(tools):
 def test_small_values_and_counts_have_no_headline(tools):
     assert call(tools, "aggregate", column="Units", op="sum")["headline"] is None
     assert call(tools, "aggregate", column="Revenue", op="count")["headline"] is None
+
+
+def test_ids_and_dates_stay_text_but_formatted_numbers_parse():
+    frame = build_frame(
+        ["Order ID", "Date", "Amount", "Rate"],
+        [["ORD-1001", "2026-09-01", "₹1,20,000", "12%"], ["ORD-1002", "2026-09-02", "(500)", "8%"]],
+    )
+    assert list(frame["Order ID"]) == ["ORD-1001", "ORD-1002"]
+    assert list(frame["Date"]) == ["2026-09-01", "2026-09-02"]
+    assert list(frame["Amount"]) == [120000.0, -500.0]
+    assert list(frame["Rate"]) == [12.0, 8.0]

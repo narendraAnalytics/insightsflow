@@ -12,8 +12,8 @@ access_token_enc/refresh_token_enc are Fernet-encrypted (app/core/crypto.py)
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -36,13 +36,6 @@ class Connection(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     scopes: Mapped[str] = mapped_column(String(512))
     key_version: Mapped[str] = mapped_column(String(8))
-
-    # Single selected spreadsheet per connection (MVP — see roadmap.txt's
-    # fuller `data_sources` table for the eventual multi-source version).
-    google_sheet_id: Mapped[str | None] = mapped_column(String(128))
-    google_sheet_name: Mapped[str | None] = mapped_column(String(255))
-    google_sheet_headers: Mapped[list | None] = mapped_column(JSONB)
-    google_sheet_row_count: Mapped[int | None] = mapped_column(Integer)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

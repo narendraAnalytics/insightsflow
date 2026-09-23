@@ -22,6 +22,7 @@ from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 from app.core.config import get_settings
 from app.core.errors import AppError
@@ -147,43 +148,81 @@ def refresh_access_token(refresh_token: str, scopes: list[str]) -> tuple[str, da
     return creds.token, expires_at
 
 
+class SheetNotAccessible(AppError):
+    """Deleted, unshared, or never granted to this app (drive.file only sees
+    files the user picked)."""
+
+    status_code = 404
+    code = "sheet_not_accessible"
+
+
+class GoogleRateLimited(AppError):
+    status_code = 429
+    code = "google_rate_limited"
+
+
+class GoogleApiError(AppError):
+    status_code = 502
+    code = "google_api_error"
+
+
+def _execute(request):  # noqa: ANN001, ANN202
+    """Runs a googleapiclient request, translating HTTP failures into AppErrors
+    the API layer can return cleanly instead of a bare 500."""
+    try:
+        return request.execute()
+    except HttpError as exc:
+        status = getattr(exc.resp, "status", 0)
+        if status in (403, 404):
+            raise SheetNotAccessible(
+                "We can't open that spreadsheet. It may have been deleted or unshared — "
+                "pick it again on the Integrations page."
+            ) from exc
+        if status == 429:
+            raise GoogleRateLimited("Google is rate-limiting requests. Try again shortly.") from exc
+        raise GoogleApiError("Google Sheets returned an error. Try again.") from exc
+
+
+class SheetTabNotFound(AppError):
+    status_code = 404
+    code = "sheet_tab_not_found"
+
+
+@dataclass
+class SheetTab:
+    id: int
+    title: str
+
+
+@dataclass
+class SpreadsheetInfo:
+    name: str
+    tabs: list[SheetTab]
+
+
 @dataclass
 class SheetMetadata:
     name: str
+    tab_title: str
+    tab_id: int | None
     headers: list[str]
     row_count: int
 
 
-def fetch_sheet_metadata(access_token: str, spreadsheet_id: str) -> SheetMetadata:
-    """Blocking — call via asyncio.to_thread. One small real read against the
-    Sheets API, used to prove the connection actually works (no fabricated
-    numbers on the dashboard)."""
+@dataclass
+class SheetPreview:
+    headers: list[str]
+    rows: list[list[str]]
+
+
+def _service(access_token: str):  # noqa: ANN202
     creds = Credentials(token=access_token)
-    service = build("sheets", "v4", credentials=creds, cache_discovery=False)
+    return build("sheets", "v4", credentials=creds, cache_discovery=False)
 
-    meta = (
-        service.spreadsheets()
-        .get(spreadsheetId=spreadsheet_id, fields="properties.title,sheets.properties")
-        .execute()
-    )
-    title = meta.get("properties", {}).get("title", "Untitled spreadsheet")
-    first_sheet = meta["sheets"][0]["properties"]
-    first_sheet_title = first_sheet["title"]
 
-    # gridProperties.rowCount is the sheet's allocated grid (1000 by default),
-    # not how many rows hold data — read the values instead. A bare sheet-title
-    # range returns only the used range, so this counts real rows.
-    values_resp = (
-        service.spreadsheets()
-        .values()
-        .get(spreadsheetId=spreadsheet_id, range=f"'{first_sheet_title}'")
-        .execute()
-    )
-    values = values_resp.get("values", [])
-    headers = _clean_headers(values[0]) if values else []
-    row_count = sum(1 for row in values[1:] if _row_has_data(row))
-
-    return SheetMetadata(name=title, headers=headers, row_count=row_count)
+def _a1(tab_title: str, suffix: str = "") -> str:
+    """A1 range for a tab; single quotes inside a title are doubled per the spec."""
+    return "'" + tab_title.replace("'", "''") + "'" + suffix
 
 
 def _row_has_data(row: list[str]) -> bool:
@@ -199,34 +238,70 @@ def _clean_headers(headers: list[str]) -> list[str]:
     return headers[:end]
 
 
-@dataclass
-class SheetPreview:
-    headers: list[str]
-    rows: list[list[str]]
-
-
-def fetch_sheet_preview(access_token: str, spreadsheet_id: str, max_rows: int = 25) -> SheetPreview:
-    """Blocking — call via asyncio.to_thread. Real data for the 'view sheet'
-    modal — headers plus up to `max_rows` data rows, in reading order."""
-    creds = Credentials(token=access_token)
-    service = build("sheets", "v4", credentials=creds, cache_discovery=False)
-
-    meta = (
-        service.spreadsheets()
-        .get(spreadsheetId=spreadsheet_id, fields="sheets.properties")
-        .execute()
+def get_spreadsheet_info(access_token: str, spreadsheet_id: str) -> SpreadsheetInfo:
+    """Blocking — call via asyncio.to_thread. Name + tabs of a spreadsheet the
+    user has granted access to (drive.file grants the whole spreadsheet)."""
+    meta = _execute(
+        _service(access_token)
+        .spreadsheets()
+        .get(
+            spreadsheetId=spreadsheet_id,
+            fields="properties.title,sheets.properties(sheetId,title,index)",
+        )
     )
-    first_sheet_title = meta["sheets"][0]["properties"]["title"]
+    tabs = [
+        SheetTab(id=s["properties"]["sheetId"], title=s["properties"]["title"])
+        for s in meta.get("sheets", [])
+    ]
+    return SpreadsheetInfo(name=meta.get("properties", {}).get("title", "Untitled"), tabs=tabs)
 
-    # +1 for the header row itself.
-    data_range = f"'{first_sheet_title}'!1:{max_rows + 1}"
-    values_resp = (
-        service.spreadsheets()
+
+def _resolve_tab(info: SpreadsheetInfo, tab_title: str | None) -> SheetTab:
+    if not info.tabs:
+        raise SheetTabNotFound("This spreadsheet has no tabs")
+    if not tab_title:  # None, or '' = legacy 'first tab, not yet resolved'
+        return info.tabs[0]
+    for tab in info.tabs:
+        if tab.title == tab_title:
+            return tab
+    raise SheetTabNotFound(f"No tab named '{tab_title}' in this spreadsheet")
+
+
+def fetch_sheet_metadata(
+    access_token: str, spreadsheet_id: str, tab_title: str | None = None
+) -> SheetMetadata:
+    """Blocking — call via asyncio.to_thread. Reads the real values of one tab
+    (first tab when `tab_title` is None) and counts only rows that hold data —
+    the sheet's allocated grid (1000 rows by default) is not a row count."""
+    info = get_spreadsheet_info(access_token, spreadsheet_id)
+    tab = _resolve_tab(info, tab_title)
+    values = _execute(
+        _service(access_token)
+        .spreadsheets()
         .values()
-        .get(spreadsheetId=spreadsheet_id, range=data_range)
-        .execute()
+        .get(spreadsheetId=spreadsheet_id, range=_a1(tab.title))
+    ).get("values", [])
+    headers = _clean_headers(values[0]) if values else []
+    row_count = sum(1 for row in values[1:] if _row_has_data(row))
+    return SheetMetadata(
+        name=info.name, tab_title=tab.title, tab_id=tab.id, headers=headers, row_count=row_count
     )
-    values = values_resp.get("values", [])
+
+
+def fetch_sheet_preview(
+    access_token: str, spreadsheet_id: str, tab_title: str | None = None, max_rows: int = 25
+) -> SheetPreview:
+    """Blocking — call via asyncio.to_thread. Headers plus up to `max_rows`
+    non-blank data rows of one tab, in reading order."""
+    info = get_spreadsheet_info(access_token, spreadsheet_id)
+    tab = _resolve_tab(info, tab_title)
+    # +1 for the header row itself.
+    values = _execute(
+        _service(access_token)
+        .spreadsheets()
+        .values()
+        .get(spreadsheetId=spreadsheet_id, range=_a1(tab.title, f"!1:{max_rows + 1}"))
+    ).get("values", [])
     if not values:
         return SheetPreview(headers=[], rows=[])
 
@@ -234,5 +309,5 @@ def fetch_sheet_preview(access_token: str, spreadsheet_id: str, max_rows: int = 
     rows = [row[: len(headers)] for row in values[1:] if _row_has_data(row)]
     # Sheets API drops trailing empty cells per row — pad so every row lines
     # up with the header count for a clean table render.
-    padded_rows = [row + [""] * max(0, len(headers) - len(row)) for row in rows]
-    return SheetPreview(headers=headers, rows=padded_rows)
+    padded = [row + [""] * max(0, len(headers) - len(row)) for row in rows]
+    return SheetPreview(headers=headers, rows=padded)

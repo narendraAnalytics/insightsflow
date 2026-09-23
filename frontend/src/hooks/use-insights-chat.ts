@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { apiFetch } from "@/lib/api";
+import type { DataSource } from "@/hooks/use-google-sheets-connection";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -31,9 +32,28 @@ export type ChatMessage = {
 
 type Suggestions = { sheet_name: string; questions: string[] };
 
-export type ConversationSummary = { id: string; title: string; updated_at: string };
+export type ConversationSummary = {
+  id: string;
+  title: string;
+  data_source_ids: string[];
+  updated_at: string;
+};
 
-type ConversationDetail = { id: string; title: string; messages: ChatMessage[] };
+type ConversationDetail = {
+  id: string;
+  title: string;
+  data_source_ids: string[];
+  messages: ChatMessage[];
+};
+
+/** Most sheets/tabs one chat may use at once (matches the backend limit). */
+export const MAX_SOURCES_PER_CHAT = 5;
+
+/** Keeps the still-existing part of a selection; falls back to the first source. */
+function pruneSelection(current: string[], sources: DataSource[]): string[] {
+  const kept = sources.filter((s) => current.includes(s.id)).map((s) => s.id);
+  return kept.length > 0 ? kept : sources[0] ? [sources[0].id] : [];
+}
 
 let counter = 0;
 const nextId = () => `m${Date.now()}-${counter++}`;
@@ -54,12 +74,17 @@ function parseBlock(block: string): { event: string; data: Record<string, unknow
   }
 }
 
-export function useInsightsChat(enabled: boolean) {
+export function useInsightsChat(enabled: boolean, sources: DataSource[]) {
   const { getToken } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestions | null>(null);
   const [busy, setBusy] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  // The sheets/tabs the current chat asks about (1-5). Chosen before the first
+  // question, then locked to the conversation (empty on an opened chat whose
+  // sheets were all removed).
+  const [sourceIds, setSourceIds] = useState<string[]>([]);
+  const sourceKey = sourceIds.join(",");
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [opening, setOpening] = useState(false);
   const conversationIdRef = useRef<string | null>(null);
@@ -69,12 +94,27 @@ export function useInsightsChat(enabled: boolean) {
   messagesRef.current = messages;
 
   useEffect(() => {
-    if (!enabled) return;
+    if (conversationIdRef.current) return;
+    setSourceIds((current) => {
+      const next = pruneSelection(current, sources);
+      return next.join(",") === current.join(",") ? current : next;
+    });
+  }, [sources]);
+
+  useEffect(() => {
+    if (!enabled || !sourceKey) return;
     let cancelled = false;
+    setSuggestions(null);
     (async () => {
       try {
         const token = await getToken();
-        const res = await apiFetch<Suggestions>("/api/v1/insights/suggestions", token);
+        const res = await apiFetch<Suggestions>(
+          `/api/v1/insights/suggestions?${sourceKey
+            .split(",")
+            .map((id) => `source_ids=${id}`)
+            .join("&")}`,
+          token
+        );
         if (!cancelled) setSuggestions(res);
       } catch {
         /* suggestions are a nicety — the chat works without them */
@@ -83,7 +123,7 @@ export function useInsightsChat(enabled: boolean) {
     return () => {
       cancelled = true;
     };
-  }, [enabled, getToken]);
+  }, [enabled, sourceKey, getToken]);
 
   const refreshConversations = useCallback(async () => {
     try {
@@ -139,7 +179,12 @@ export function useInsightsChat(enabled: boolean) {
         const res = await fetch(`${API_URL}/api/v1/insights/ask`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ question: text, conversation_id: conversationIdRef.current }),
+          body: JSON.stringify({
+            question: text,
+            conversation_id: conversationIdRef.current,
+            // Only a new chat picks its sheet; an existing one keeps its own.
+            data_source_ids: conversationIdRef.current ? undefined : sourceIds,
+          }),
           signal: controller.signal,
         });
         if (!res.ok || !res.body) {
@@ -223,14 +268,16 @@ export function useInsightsChat(enabled: boolean) {
         void refreshConversations();
       }
     },
-    [busy, getToken, patchAssistant, refreshConversations]
+    [busy, sourceIds, getToken, patchAssistant, refreshConversations]
   );
 
   const stop = useCallback(() => abortRef.current?.abort(), []);
   const newChat = useCallback(() => {
     setMessages([]);
     setConversationId(null);
-  }, []);
+    conversationIdRef.current = null;
+    setSourceIds((current) => pruneSelection(current, sources));
+  }, [sources]);
 
   const openConversation = useCallback(
     async (id: string) => {
@@ -241,6 +288,7 @@ export function useInsightsChat(enabled: boolean) {
         const detail = await apiFetch<ConversationDetail>(`/api/v1/insights/conversations/${id}`, token);
         setMessages(detail.messages);
         setConversationId(detail.id);
+        setSourceIds(detail.data_source_ids);
       } catch {
         void refreshConversations();
       } finally {
@@ -270,6 +318,9 @@ export function useInsightsChat(enabled: boolean) {
     opening,
     conversationId,
     conversations,
+    sourceIds,
+    setSourceIds,
+    sourceRemoved: conversationId !== null && sourceIds.length === 0,
     send,
     stop,
     newChat,

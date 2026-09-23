@@ -27,6 +27,25 @@ class ChatConversation(Base):
     )
 
 
+class ChatConversationSource(Base):
+    """A sheet/tab a chat asks about (a chat can span several, e.g. to join them).
+    Rows disappear when the data source is removed — the transcript stays."""
+
+    __tablename__ = "chat_conversation_sources"
+
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("chat_conversations.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    data_source_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("data_sources.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+
+
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
 

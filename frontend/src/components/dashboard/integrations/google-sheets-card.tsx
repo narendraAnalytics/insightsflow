@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 import {
+  AnimatePresence,
   motion,
   useMotionTemplate,
   useMotionValue,
@@ -9,13 +10,19 @@ import {
   useSpring,
   useTransform,
 } from "framer-motion";
-import { Eye, Hash, LinkSimple, Rows, Table, XCircle } from "@phosphor-icons/react";
+import { Eye, LinkSimple, Plus, Stack, Trash, XCircle } from "@phosphor-icons/react";
 import { GoogleSheetsGlyph } from "@/components/site/brand-icons";
-import { useGoogleSheetsConnection, type GoogleSheetsConnection } from "@/hooks/use-google-sheets-connection";
+import {
+  sourceLabel,
+  useGoogleSheetsConnection,
+  type DataSource,
+  type SpreadsheetTabs,
+} from "@/hooks/use-google-sheets-connection";
 import { openGoogleSheetsPicker } from "@/lib/google-picker";
 import { SheetPreviewModal } from "@/components/dashboard/integrations/sheet-preview-modal";
+import { TabPickerDialog } from "@/components/dashboard/integrations/tab-picker-dialog";
 
-const chipAccents = [
+const tabAccents = [
   "var(--flow-magenta)",
   "var(--flow-cyan)",
   "var(--flow-coral)",
@@ -39,8 +46,8 @@ function TiltSlab({ children }: { children: ReactNode }) {
   const sx = useSpring(px, spring);
   const sy = useSpring(py, spring);
 
-  const rotateY = useTransform(sx, [0, 1], [-10, 10]);
-  const rotateX = useTransform(sy, [0, 1], [9, -9]);
+  const rotateY = useTransform(sx, [0, 1], [-8, 8]);
+  const rotateX = useTransform(sy, [0, 1], [7, -7]);
   const glareX = useTransform(sx, [0, 1], [0, 100]);
   const glareY = useTransform(sy, [0, 1], [0, 100]);
   const shadowX = useTransform(sx, [0, 1], [26, -26]);
@@ -72,7 +79,6 @@ function TiltSlab({ children }: { children: ReactNode }) {
         }}
         className="relative rounded-[28px]"
       >
-        {/* frosted face */}
         <div
           aria-hidden="true"
           className="absolute inset-0 overflow-hidden rounded-[28px] border border-(--flow-cream)/90 backdrop-blur-xl"
@@ -95,6 +101,9 @@ function TiltSlab({ children }: { children: ReactNode }) {
 
 const depth = (z: number) => ({ transform: `translateZ(${z}px)` });
 
+const raised = (accent: string) =>
+  `0 16px 26px -16px color-mix(in oklab, ${accent} 55%, transparent), 0 2px 0 var(--flow-cream) inset`;
+
 function StatusPill({ connected }: { connected: boolean }) {
   return connected ? (
     <span className="inline-flex items-center gap-2 rounded-full bg-(--flow-cream)/80 px-3 py-1.5 text-[12px] font-semibold text-(--flow-ink) shadow-[0_8px_18px_-10px_var(--flow-cyan)]">
@@ -111,159 +120,204 @@ function StatusPill({ connected }: { connected: boolean }) {
   );
 }
 
-function StatTile({
-  icon,
-  value,
-  label,
+function SourceTile({
+  source,
   accent,
+  busy,
+  confirming,
+  onView,
+  onAddTab,
+  onAskRemove,
+  onCancelRemove,
+  onConfirmRemove,
 }: {
-  icon: ReactNode;
-  value: number;
-  label: string;
+  source: DataSource;
   accent: string;
+  busy: boolean;
+  confirming: boolean;
+  onView: () => void;
+  onAddTab: () => void;
+  onAskRemove: () => void;
+  onCancelRemove: () => void;
+  onConfirmRemove: () => void;
 }) {
+  const columns = source.headers.length;
   return (
-    <div
-      className="relative overflow-hidden rounded-2xl border border-(--flow-cream)/90 bg-(--flow-cream)/70 px-4 py-3.5"
-      style={{
-        boxShadow: `0 18px 28px -16px color-mix(in oklab, ${accent} 55%, transparent), 0 1px 0 var(--flow-cream) inset`,
-      }}
+    <motion.li
+      layout
+      initial={{ opacity: 0, y: 10, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      transition={{ type: "spring", stiffness: 260, damping: 24 }}
+      className="relative overflow-hidden rounded-2xl border border-(--flow-cream)/90 bg-(--flow-cream)/75 p-4"
+      style={{ boxShadow: raised(accent) }}
     >
       <span
         aria-hidden="true"
-        className="absolute -top-6 -right-6 size-20 rounded-full blur-2xl"
-        style={{ backgroundColor: `color-mix(in oklab, ${accent} 35%, transparent)` }}
+        className="absolute -top-8 -right-8 size-24 rounded-full blur-2xl"
+        style={{ backgroundColor: `color-mix(in oklab, ${accent} 30%, transparent)` }}
       />
-      <div className="relative flex items-end justify-between gap-3">
-        <div>
-          <p className="font-heading text-[34px] leading-none font-bold tracking-tight tabular-nums text-(--flow-ink)">
-            {value.toLocaleString()}
+      <div className="relative flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-heading text-[16px] leading-tight font-semibold tracking-tight text-(--flow-ink)">
+            {source.name}
           </p>
-          <p className="mt-1.5 text-[12.5px] font-medium text-(--flow-ink)/55">{label}</p>
-        </div>
-        <span style={{ color: accent }} className="mb-0.5">
-          {icon}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function SheetLoadedState({
-  connection,
-  onView,
-}: {
-  connection: GoogleSheetsConnection;
-  onView: () => void;
-}) {
-  const headers = connection.google_sheet_headers ?? [];
-
-  return (
-    <motion.div
-      key={connection.google_sheet_id}
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-      className="flex flex-col gap-4"
-      style={{ transformStyle: "preserve-3d" }}
-    >
-      <div className="flex items-center gap-3" style={depth(28)}>
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-heading text-[17px] font-semibold tracking-tight text-(--flow-ink)">
-            {connection.google_sheet_name}
-          </p>
-          <p className="text-[12.5px] font-medium text-(--flow-ink)/50">Synced and ready to analyze</p>
+          <span
+            className="mt-1.5 inline-flex max-w-full items-center gap-1.5 rounded-full border border-(--flow-cream) px-2.5 py-0.5 text-[12px] font-medium text-(--flow-ink)/75"
+            style={{ backgroundColor: `color-mix(in oklab, ${accent} 24%, var(--flow-cream))` }}
+          >
+            <Stack weight="duotone" className="size-3.5 shrink-0" />
+            <span className="truncate">{source.tab_title || "First tab"}</span>
+          </span>
         </div>
         <button
           type="button"
           onClick={onView}
-          title="View sheet"
-          className="bg-gradient-flow flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-[12.5px] font-semibold text-(--flow-cream) shadow-[0_14px_24px_-12px_var(--flow-magenta)] transition-transform hover:scale-[1.04] active:scale-[0.97]"
+          disabled={busy}
+          title={`View ${sourceLabel(source)}`}
+          className="bg-gradient-flow flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12.5px] font-semibold text-(--flow-cream) shadow-[0_12px_20px_-10px_var(--flow-magenta)] transition-transform hover:scale-[1.05] active:scale-[0.96] disabled:opacity-60"
         >
           <Eye weight="bold" className="size-3.5" />
           View
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3" style={depth(20)}>
-        <StatTile
-          icon={<Rows weight="duotone" className="size-6" />}
-          value={connection.google_sheet_row_count ?? 0}
-          label="Rows"
-          accent="var(--flow-magenta)"
-        />
-        <StatTile
-          icon={<Hash weight="duotone" className="size-6" />}
-          value={headers.length}
-          label="Columns"
-          accent="var(--flow-coral)"
-        />
-      </div>
+      <div className="relative mt-3 flex items-end justify-between gap-3">
+        <p className="text-[13px] text-(--flow-ink)/55">
+          <span className="font-heading text-[22px] font-bold tabular-nums text-(--flow-ink)">
+            {source.row_count.toLocaleString("en-IN")}
+          </span>{" "}
+          rows ·{" "}
+          <span className="font-semibold tabular-nums text-(--flow-ink)/75">{columns}</span> columns
+        </p>
 
-      {headers.length > 0 && (
-        <div className="flex flex-wrap gap-2" style={depth(10)}>
-          {headers.map((header, i) => (
-            <span
-              key={`${header}-${i}`}
-              className="rounded-full border border-(--flow-cream)/80 px-3 py-1 text-[12px] font-medium text-(--flow-ink)/75"
-              style={{ backgroundColor: `color-mix(in oklab, ${chipAccents[i % chipAccents.length]} 22%, var(--flow-cream))` }}
+        {confirming ? (
+          <span className="flex items-center gap-2 text-[12.5px] font-medium">
+            <span className="text-(--flow-ink)/60">Remove?</span>
+            <button
+              type="button"
+              onClick={onConfirmRemove}
+              disabled={busy}
+              className="rounded-full bg-(--flow-coral) px-2.5 py-1 font-semibold text-(--flow-cream) disabled:opacity-60"
             >
-              {header}
-            </span>
-          ))}
-        </div>
-      )}
-    </motion.div>
+              Yes
+            </button>
+            <button type="button" onClick={onCancelRemove} className="text-(--flow-ink)/55 hover:text-(--flow-ink)">
+              No
+            </button>
+          </span>
+        ) : (
+          <span className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={onAddTab}
+              disabled={busy}
+              title="Add another tab from this spreadsheet"
+              className="inline-flex items-center gap-1 rounded-full border border-(--flow-cream) bg-(--flow-cream)/80 px-3 py-1 text-[12px] font-semibold text-(--flow-ink)/75 shadow-[0_8px_14px_-10px_var(--flow-magenta)] transition-transform hover:scale-[1.04] active:scale-[0.97] disabled:opacity-60"
+            >
+              <Plus weight="bold" className="size-3" />
+              Add another tab
+            </button>
+            <button
+              type="button"
+              onClick={onAskRemove}
+              disabled={busy}
+              aria-label={`Remove ${sourceLabel(source)}`}
+              className="flex size-7 items-center justify-center rounded-full text-(--flow-ink)/35 transition-colors hover:bg-(--flow-coral)/15 hover:text-(--flow-coral) disabled:opacity-60"
+            >
+              <Trash weight="bold" className="size-3.5" />
+            </button>
+          </span>
+        )}
+      </div>
+    </motion.li>
   );
 }
 
+type TabDialogState = {
+  spreadsheetId: string;
+  info: SpreadsheetTabs;
+  takenTitles: string[];
+};
+
 export function GoogleSheetsCard() {
-  const { connection, loading, error, connect, getPickerToken, selectSheet, disconnect, getSheetPreview } =
-    useGoogleSheetsConnection();
+  const {
+    connection,
+    loading,
+    error,
+    connect,
+    getPickerToken,
+    getTabs,
+    addSource,
+    removeSource,
+    getSourcePreview,
+    disconnect,
+  } = useGoogleSheetsConnection();
   const [busy, setBusy] = useState(false);
-  const [pickerError, setPickerError] = useState<string | null>(null);
-  const [previewOpen, setPreviewOpen] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [previewSource, setPreviewSource] = useState<DataSource | null>(null);
+  const [tabDialog, setTabDialog] = useState<TabDialogState | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   const isConnected = connection?.status === "connected";
-  const hasSheet = Boolean(connection?.google_sheet_id);
+  const sources = connection?.sources ?? [];
 
-  const handleConnect = async () => {
+  // Stable per source so the preview modal's fetch effect doesn't re-run each render.
+  const previewSourceId = previewSource?.id ?? null;
+  const fetchPreview = useCallback(
+    () => getSourcePreview(previewSourceId as string),
+    [getSourcePreview, previewSourceId]
+  );
+
+  /** Runs an action with the shared busy flag and surfaces its error message. */
+  const run = async (action: () => Promise<void>) => {
+    setActionError(null);
     setBusy(true);
     try {
-      await connect();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handlePickSheet = async () => {
-    setPickerError(null);
-    setBusy(true);
-    try {
-      const { access_token, app_id } = await getPickerToken();
-      await openGoogleSheetsPicker(access_token, app_id, async (file) => {
-        setBusy(true);
-        try {
-          await selectSheet(file.id, file.name);
-        } finally {
-          setBusy(false);
-        }
-      });
+      await action();
     } catch (err) {
-      setPickerError(err instanceof Error ? err.message : "Couldn't open the file picker");
+      setActionError(err instanceof Error ? err.message : "Something went wrong. Try again.");
     } finally {
       setBusy(false);
     }
   };
 
-  const handleDisconnect = async () => {
-    setBusy(true);
-    try {
-      await disconnect();
-    } finally {
-      setBusy(false);
-    }
+  const openTabsFor = async (spreadsheetId: string) => {
+    const info = await getTabs(spreadsheetId);
+    const takenTitles = sources.filter((s) => s.spreadsheet_id === spreadsheetId).map((s) => s.tab_title);
+    setTabDialog({ spreadsheetId, info, takenTitles });
   };
+
+  const handleAddSheet = () =>
+    run(async () => {
+      const { access_token, app_id } = await getPickerToken();
+      await openGoogleSheetsPicker(access_token, app_id, (file) => {
+        void run(async () => {
+          const info = await getTabs(file.id);
+          if (info.tabs.length > 1) {
+            const takenTitles = sources.filter((s) => s.spreadsheet_id === file.id).map((s) => s.tab_title);
+            setTabDialog({ spreadsheetId: file.id, info, takenTitles });
+          } else {
+            await addSource(file.id, info.tabs[0]?.title);
+          }
+        });
+      });
+    });
+
+  const handleConfirmTabs = (titles: string[]) =>
+    run(async () => {
+      if (!tabDialog) return;
+      for (const title of titles) {
+        await addSource(tabDialog.spreadsheetId, title);
+      }
+      setTabDialog(null);
+    });
+
+  const handleRemove = (id: string) =>
+    run(async () => {
+      await removeSource(id);
+      setConfirmingId(null);
+    });
 
   return (
     <>
@@ -297,7 +351,7 @@ export function GoogleSheetsCard() {
           <div style={depth(24)}>
             <button
               type="button"
-              onClick={handleConnect}
+              onClick={() => void run(connect)}
               disabled={busy}
               className="bg-gradient-flow inline-flex items-center gap-2 rounded-full px-5 py-3 text-[14px] font-semibold text-(--flow-cream) shadow-[0_18px_30px_-14px_var(--flow-magenta)] transition-transform hover:scale-[1.04] active:scale-[0.97] disabled:opacity-60"
             >
@@ -312,44 +366,77 @@ export function GoogleSheetsCard() {
               <span className="font-semibold text-(--flow-ink)/80">{connection?.external_account_email}</span>
             </p>
 
-            {hasSheet && connection ? (
-              <SheetLoadedState connection={connection} onView={() => setPreviewOpen(true)} />
-            ) : (
-              <div style={depth(24)}>
-                <button
-                  type="button"
-                  onClick={handlePickSheet}
-                  disabled={busy}
-                  className="inline-flex items-center gap-2 rounded-full border border-(--flow-cream) bg-(--flow-cream)/80 px-5 py-3 text-[14px] font-semibold text-(--flow-ink) shadow-[0_16px_26px_-14px_var(--flow-magenta)] transition-transform hover:scale-[1.04] active:scale-[0.97] disabled:opacity-60"
-                >
-                  <Table weight="bold" className="size-4 text-(--flow-magenta)" />
-                  Select spreadsheet
-                </button>
-              </div>
+            {sources.length > 0 && (
+              <ul className="flex flex-col gap-3" style={depth(22)}>
+                <AnimatePresence initial={false}>
+                  {sources.map((source, i) => (
+                    <SourceTile
+                      key={source.id}
+                      source={source}
+                      accent={tabAccents[i % tabAccents.length]}
+                      busy={busy}
+                      confirming={confirmingId === source.id}
+                      onView={() => setPreviewSource(source)}
+                      onAddTab={() => void run(() => openTabsFor(source.spreadsheet_id))}
+                      onAskRemove={() => setConfirmingId(source.id)}
+                      onCancelRemove={() => setConfirmingId(null)}
+                      onConfirmRemove={() => void handleRemove(source.id)}
+                    />
+                  ))}
+                </AnimatePresence>
+              </ul>
             )}
 
-            <button
-              type="button"
-              onClick={handleDisconnect}
-              disabled={busy}
-              className="inline-flex w-fit items-center gap-1.5 text-[12.5px] font-medium text-(--flow-ink)/45 transition-colors hover:text-(--flow-coral) disabled:opacity-60"
-            >
-              <XCircle weight="bold" className="size-3.5" />
-              Disconnect
-            </button>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2" style={depth(24)}>
+              <button
+                type="button"
+                onClick={() => void handleAddSheet()}
+                disabled={busy}
+                className={
+                  sources.length === 0
+                    ? "bg-gradient-flow inline-flex items-center gap-2 rounded-full px-5 py-3 text-[14px] font-semibold text-(--flow-cream) shadow-[0_18px_30px_-14px_var(--flow-magenta)] transition-transform hover:scale-[1.04] active:scale-[0.97] disabled:opacity-60"
+                    : "inline-flex items-center gap-2 rounded-full border border-(--flow-cream) bg-(--flow-cream)/80 px-4 py-2.5 text-[13.5px] font-semibold text-(--flow-ink) shadow-[0_14px_24px_-14px_var(--flow-magenta)] transition-transform hover:scale-[1.04] active:scale-[0.97] disabled:opacity-60"
+                }
+              >
+                <Plus weight="bold" className="size-4" />
+                {sources.length === 0 ? "Select spreadsheet" : "Add another sheet"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void run(disconnect)}
+                disabled={busy}
+                className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-(--flow-ink)/45 transition-colors hover:text-(--flow-coral) disabled:opacity-60"
+              >
+                <XCircle weight="bold" className="size-3.5" />
+                Disconnect
+              </button>
+            </div>
           </div>
         )}
 
-        {(error || pickerError) && (
-          <p className="text-[12px] font-medium text-(--flow-coral)">{error ?? pickerError}</p>
+        {(error || actionError) && (
+          <p role="alert" className="text-[12.5px] font-medium text-(--flow-coral)">
+            {actionError ?? error}
+          </p>
         )}
       </TiltSlab>
 
       <SheetPreviewModal
-        open={previewOpen}
-        onOpenChange={setPreviewOpen}
-        sheetName={connection?.google_sheet_name ?? null}
-        fetchPreview={getSheetPreview}
+        open={previewSource !== null}
+        onOpenChange={(open) => !open && setPreviewSource(null)}
+        sheetName={previewSource ? sourceLabel(previewSource) : null}
+        fetchPreview={fetchPreview}
+      />
+
+      <TabPickerDialog
+        open={tabDialog !== null}
+        onOpenChange={(open) => !open && setTabDialog(null)}
+        spreadsheetName={tabDialog?.info.name ?? ""}
+        tabs={tabDialog?.info.tabs ?? []}
+        takenTitles={tabDialog?.takenTitles ?? []}
+        busy={busy}
+        onConfirm={(titles) => void handleConfirmTabs(titles)}
       />
     </>
   );

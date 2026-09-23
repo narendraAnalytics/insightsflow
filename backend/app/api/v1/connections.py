@@ -3,9 +3,12 @@ See app/services/connection_service.py for the business logic and
 app/core/oauth_state.py for why the callback doesn't need a bearer token.
 """
 
-from fastapi import APIRouter, Depends, Query
+import uuid
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, Path, Query
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -13,8 +16,9 @@ from app.core.errors import NotFoundError
 from app.core.oauth_state import verify_state
 from app.core.security import Principal, get_current_principal
 from app.db.models.connection import Connection
+from app.db.models.data_source import DataSource
 from app.db.session import get_db
-from app.services import connection_service
+from app.services import connection_service, data_source_service
 
 router = APIRouter(prefix="/connections", tags=["connections"])
 
@@ -28,9 +32,10 @@ class PickerTokenResponse(BaseModel):
     app_id: str
 
 
-class SelectSheetRequest(BaseModel):
-    file_id: str
-    file_name: str
+class AddSourceRequest(BaseModel):
+    file_id: str = Field(min_length=10, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+    # None = the spreadsheet's first tab.
+    tab_title: str | None = Field(default=None, max_length=255)
 
 
 class SheetPreviewResponse(BaseModel):
@@ -38,25 +43,51 @@ class SheetPreviewResponse(BaseModel):
     rows: list[list[str]]
 
 
+class TabOut(BaseModel):
+    id: int
+    title: str
+
+
+class TabsResponse(BaseModel):
+    name: str
+    tabs: list[TabOut]
+
+
+class DataSourceOut(BaseModel):
+    id: uuid.UUID
+    spreadsheet_id: str
+    name: str
+    tab_title: str
+    headers: list[str]
+    row_count: int
+    synced_at: datetime
+
+    @classmethod
+    def from_model(cls, s: DataSource) -> "DataSourceOut":
+        return cls(
+            id=s.id,
+            spreadsheet_id=s.external_id,
+            name=s.name,
+            tab_title=s.tab_title,
+            headers=list(s.headers or []),
+            row_count=s.row_count,
+            synced_at=s.synced_at,
+        )
+
+
 class ConnectionResponse(BaseModel):
     provider: str
     status: str
     external_account_email: str | None
-    google_sheet_id: str | None
-    google_sheet_name: str | None
-    google_sheet_headers: list[str] | None
-    google_sheet_row_count: int | None
+    sources: list[DataSourceOut]
 
     @classmethod
-    def from_model(cls, c: Connection) -> "ConnectionResponse":
+    def from_model(cls, c: Connection, sources: list[DataSource]) -> "ConnectionResponse":
         return cls(
             provider=c.provider,
             status=c.status,
             external_account_email=c.external_account_email,
-            google_sheet_id=c.google_sheet_id,
-            google_sheet_name=c.google_sheet_name,
-            google_sheet_headers=c.google_sheet_headers,
-            google_sheet_row_count=c.google_sheet_row_count,
+            sources=[DataSourceOut.from_model(s) for s in sources],
         )
 
 
@@ -98,24 +129,47 @@ async def google_picker_token(
     return PickerTokenResponse(access_token=access_token, app_id=app_id)
 
 
-@router.post("/google/select-sheet", response_model=ConnectionResponse)
-async def google_select_sheet(
-    body: SelectSheetRequest,
+SpreadsheetId = Path(min_length=10, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
+
+
+@router.get("/google/spreadsheets/{spreadsheet_id}/tabs", response_model=TabsResponse)
+async def google_spreadsheet_tabs(
+    spreadsheet_id: str = SpreadsheetId,
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
-) -> ConnectionResponse:
-    connection = await connection_service.select_sheet(
-        db, principal.user_id, body.file_id, body.file_name
+) -> TabsResponse:
+    info = await data_source_service.list_tabs(db, principal.user_id, spreadsheet_id)
+    return TabsResponse(name=info.name, tabs=[TabOut(id=t.id, title=t.title) for t in info.tabs])
+
+
+@router.post("/google/sources", response_model=DataSourceOut, status_code=201)
+async def google_add_source(
+    body: AddSourceRequest,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> DataSourceOut:
+    source = await data_source_service.add_source(
+        db, principal.user_id, body.file_id, body.tab_title
     )
-    return ConnectionResponse.from_model(connection)
+    return DataSourceOut.from_model(source)
 
 
-@router.get("/google/sheet-preview", response_model=SheetPreviewResponse)
-async def google_sheet_preview(
+@router.delete("/google/sources/{source_id}", status_code=204)
+async def google_remove_source(
+    source_id: uuid.UUID,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await data_source_service.remove_source(db, principal.user_id, source_id)
+
+
+@router.get("/google/sources/{source_id}/preview", response_model=SheetPreviewResponse)
+async def google_source_preview(
+    source_id: uuid.UUID,
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> SheetPreviewResponse:
-    preview = await connection_service.get_sheet_preview(db, principal.user_id)
+    preview = await data_source_service.preview(db, principal.user_id, source_id)
     return SheetPreviewResponse(headers=preview.headers, rows=preview.rows)
 
 
@@ -128,8 +182,8 @@ async def list_connections(
         connection = await connection_service.get_connection(db, principal.user_id)
     except NotFoundError:
         return []
-    await connection_service.refresh_sheet_stats(db, connection)
-    return [ConnectionResponse.from_model(connection)]
+    sources = await data_source_service.refresh_stale_sources(db, principal.user_id)
+    return [ConnectionResponse.from_model(connection, sources)]
 
 
 @router.delete("/google", status_code=204)

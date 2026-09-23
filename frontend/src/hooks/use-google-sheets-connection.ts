@@ -4,15 +4,33 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { apiFetch } from "@/lib/api";
 
+/** One spreadsheet tab the user can ask questions about. */
+export type DataSource = {
+  id: string;
+  spreadsheet_id: string;
+  name: string;
+  tab_title: string;
+  headers: string[];
+  row_count: number;
+  synced_at: string;
+};
+
 export type GoogleSheetsConnection = {
   provider: string;
   status: string;
   external_account_email: string | null;
-  google_sheet_id: string | null;
-  google_sheet_name: string | null;
-  google_sheet_headers: string[] | null;
-  google_sheet_row_count: number | null;
+  sources: DataSource[];
 };
+
+export type SpreadsheetTabs = { name: string; tabs: { id: number; title: string }[] };
+
+export type SheetPreviewData = { headers: string[]; rows: string[][] };
+
+const BASE = "/api/v1/connections/google";
+
+/** "Sales — Q2", or just the name when the tab title isn't resolved yet. */
+export const sourceLabel = (s: Pick<DataSource, "name" | "tab_title">) =>
+  s.tab_title ? `${s.name} — ${s.tab_title}` : s.name;
 
 export function useGoogleSheetsConnection() {
   const { isSignedIn, getToken } = useAuth();
@@ -26,7 +44,6 @@ export function useGoogleSheetsConnection() {
       setLoading(false);
       return;
     }
-    setLoading(true);
     try {
       const token = await getToken();
       const rows = await apiFetch<GoogleSheetsConnection[]>("/api/v1/connections", token);
@@ -40,48 +57,68 @@ export function useGoogleSheetsConnection() {
   }, [isSignedIn, getToken]);
 
   useEffect(() => {
-    refresh();
+    void refresh();
   }, [refresh]);
 
   const connect = useCallback(async () => {
     const token = await getToken();
-    const { url } = await apiFetch<{ url: string }>("/api/v1/connections/google/connect-url", token);
+    const { url } = await apiFetch<{ url: string }>(`${BASE}/connect-url`, token);
+    // OAuth consent needs a top-level navigation, not fetch().
     window.location.href = url;
   }, [getToken]);
 
   const getPickerToken = useCallback(async () => {
     const token = await getToken();
-    return apiFetch<{ access_token: string; app_id: string }>(
-      "/api/v1/connections/google/picker-token",
-      token
-    );
+    return apiFetch<{ access_token: string; app_id: string }>(`${BASE}/picker-token`, token);
   }, [getToken]);
 
-  const selectSheet = useCallback(
-    async (fileId: string, fileName: string) => {
+  const getTabs = useCallback(
+    async (spreadsheetId: string) => {
       const token = await getToken();
-      const updated = await apiFetch<GoogleSheetsConnection>("/api/v1/connections/google/select-sheet", token, {
+      return apiFetch<SpreadsheetTabs>(`${BASE}/spreadsheets/${encodeURIComponent(spreadsheetId)}/tabs`, token);
+    },
+    [getToken]
+  );
+
+  /** Adds a tab as a data source (first tab when `tabTitle` is omitted). */
+  const addSource = useCallback(
+    async (fileId: string, tabTitle?: string) => {
+      const token = await getToken();
+      const source = await apiFetch<DataSource>(`${BASE}/sources`, token, {
         method: "POST",
-        body: { file_id: fileId, file_name: fileName },
+        body: { file_id: fileId, tab_title: tabTitle ?? null },
       });
-      setConnection(updated);
-      return updated;
+      setConnection((prev) => {
+        if (!prev) return prev;
+        const rest = prev.sources.filter((s) => s.id !== source.id);
+        return { ...prev, sources: [...rest, source] };
+      });
+      return source;
+    },
+    [getToken]
+  );
+
+  const removeSource = useCallback(
+    async (sourceId: string) => {
+      const token = await getToken();
+      await apiFetch<void>(`${BASE}/sources/${sourceId}`, token, { method: "DELETE" });
+      setConnection((prev) => (prev ? { ...prev, sources: prev.sources.filter((s) => s.id !== sourceId) } : prev));
+    },
+    [getToken]
+  );
+
+  const getSourcePreview = useCallback(
+    async (sourceId: string) => {
+      const token = await getToken();
+      return apiFetch<SheetPreviewData>(`${BASE}/sources/${sourceId}/preview`, token);
     },
     [getToken]
   );
 
   const disconnect = useCallback(async () => {
     const token = await getToken();
-    await apiFetch<void>("/api/v1/connections/google", token, { method: "DELETE" });
+    await apiFetch<void>(BASE, token, { method: "DELETE" });
     setConnection(null);
-  }, [getToken]);
-
-  const getSheetPreview = useCallback(async () => {
-    const token = await getToken();
-    return apiFetch<{ headers: string[]; rows: string[][] }>(
-      "/api/v1/connections/google/sheet-preview",
-      token
-    );
   }, [getToken]);
 
   return {
@@ -91,8 +128,10 @@ export function useGoogleSheetsConnection() {
     refresh,
     connect,
     getPickerToken,
-    selectSheet,
+    getTabs,
+    addSource,
+    removeSource,
+    getSourcePreview,
     disconnect,
-    getSheetPreview,
   };
 }

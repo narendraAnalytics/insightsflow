@@ -24,10 +24,6 @@ class Filter(BaseModel):
     value: str | float | int
 
 
-class _NoArgs(BaseModel):
-    pass
-
-
 def _dedupe_headers(headers: list[str]) -> list[str]:
     seen: dict[str, int] = {}
     out: list[str] = []
@@ -38,21 +34,25 @@ def _dedupe_headers(headers: list[str]) -> list[str]:
     return out
 
 
+_NUMBER = re.compile(r"-?\d+(?:\.\d+)?")
+_DECORATION = re.compile(r"[₹$€£¥,\s%]")
+
+
 def _to_number(value: Any) -> float | None:
-    """Parses '₹1,20,000', '$3.5', '12%', '(45)' style strings."""
+    """Parses '₹1,20,000', '$3.5', '12%', '(45)'. Anything else — 'ORD-1001',
+    '2026-09-01', 'Rs 5' — is text, not a number (IDs and dates must stay text)."""
     if isinstance(value, int | float):
         return float(value)
     text = str(value).strip()
     if not text:
         return None
     negative = text.startswith("(") and text.endswith(")")
-    cleaned = re.sub(r"[^\d.\-]", "", text)
-    if cleaned in {"", "-", ".", "-."}:
+    if negative:
+        text = text[1:-1]
+    text = _DECORATION.sub("", text)
+    if not _NUMBER.fullmatch(text):
         return None
-    try:
-        number = float(cleaned)
-    except ValueError:
-        return None
+    number = float(text)
     return -abs(number) if negative else number
 
 
@@ -99,7 +99,7 @@ def _fmt(n: float) -> float | int:
     return int(n) if float(n).is_integer() else round(float(n), 4)
 
 
-class _ColumnError(Exception):
+class _ToolError(Exception):
     pass
 
 
@@ -109,7 +109,7 @@ def _resolve(df: pd.DataFrame, name: str) -> str:
         if str(col).lower() == wanted:
             return str(col)
     available = ", ".join(map(str, df.columns))
-    raise _ColumnError(f"No column named '{name}'. Available columns: {available}")
+    raise _ToolError(f"No column named '{name}'. Available columns: {available}")
 
 
 def _apply_filters(df: pd.DataFrame, filters: list[Filter] | None) -> pd.DataFrame:
@@ -121,7 +121,7 @@ def _apply_filters(df: pd.DataFrame, filters: list[Filter] | None) -> pd.DataFra
         elif pd.api.types.is_numeric_dtype(series):
             num = _to_number(f.value)
             if num is None:
-                raise _ColumnError(f"Column '{col}' is numeric but filter value '{f.value}' is not")
+                raise _ToolError(f"Column '{col}' is numeric but filter value '{f.value}' is not")
             mask = {
                 "=": series == num,
                 "!=": series != num,
@@ -138,7 +138,7 @@ def _apply_filters(df: pd.DataFrame, filters: list[Filter] | None) -> pd.DataFra
             elif f.op == "!=":
                 mask = text != target
             else:
-                raise _ColumnError(
+                raise _ToolError(
                     f"Operator '{f.op}' only works on numeric columns; '{col}' is text"
                 )
         df = df[mask.fillna(False)]
@@ -155,24 +155,152 @@ def _table(df: pd.DataFrame, cols: list[str]) -> dict:
 
 def _numeric_only(series: pd.Series) -> None:
     if not pd.api.types.is_numeric_dtype(series):
-        raise _ColumnError(f"'{series.name}' is a text column — only 'count' works on it")
+        raise _ToolError(f"'{series.name}' is a text column — only 'count' works on it")
 
 
-def build_tools(df: pd.DataFrame) -> list[BaseTool]:
-    """Tools closed over one request's DataFrame."""
+MAX_JOIN_ROWS = 100_000
+MAX_JOIN_FANOUT = 20  # a join may not grow rows beyond this multiple of the larger input
 
-    def describe_sheet() -> str:
-        head = df.head(3)
-        sample = head.astype(object).where(head.notna(), None).to_dict(orient="records")
-        return _ok(
-            f"Sheet has {len(df)} rows and {len(df.columns)} columns",
-            row_count=len(df),
-            columns=describe_schema(df),
-            sample_rows=sample,
+
+class TableSet:
+    """The named tables one chat can query, plus any joins made along the way.
+    Per-request state: joins register a new table that later tool calls can use."""
+
+    def __init__(self, tables: dict[str, pd.DataFrame]):
+        self.tables = dict(tables)
+
+    def resolve(self, name: str | None) -> tuple[str, pd.DataFrame]:
+        if name is None or not name.strip():
+            if len(self.tables) == 1:
+                return next(iter(self.tables.items()))
+            raise _ToolError(
+                "Several tables are available — pass table=<name>. "
+                f"Tables: {', '.join(self.tables)}"
+            )
+        wanted = name.strip().lower()
+        for key, frame in self.tables.items():
+            if key.lower() == wanted:
+                return key, frame
+        raise _ToolError(f"No table named '{name}'. Tables: {', '.join(self.tables)}")
+
+    def register(self, wanted: str, frame: pd.DataFrame) -> str:
+        name, n = wanted, 2
+        while name in self.tables:
+            name, n = f"{wanted}_{n}", n + 1
+        self.tables[name] = frame
+        return name
+
+
+def _norm_key(series: pd.Series) -> pd.Series:
+    """Join keys compare case- and whitespace-insensitively for text; numbers as-is."""
+    if pd.api.types.is_numeric_dtype(series):
+        return series.astype("float64")
+    text = series.astype("string").str.strip().str.lower()
+    return text.where(text != "")
+
+
+def _join(
+    tables: TableSet, left: str, right: str, left_on: str, right_on: str, how: str
+) -> tuple[str, pd.DataFrame, dict[str, Any]]:
+    lname, ldf = tables.resolve(left)
+    rname, rdf = tables.resolve(right)
+    if lname == rname:
+        raise _ToolError("Pick two different tables to join")
+    lcol, rcol = _resolve(ldf, left_on), _resolve(rdf, right_on)
+    if pd.api.types.is_numeric_dtype(ldf[lcol]) != pd.api.types.is_numeric_dtype(rdf[rcol]):
+        raise _ToolError(
+            f"'{lcol}' and '{rcol}' have different types (number vs text) — can't join"
         )
 
-    def aggregate(column: str, op: Op, filters: list[Filter] | None = None) -> str:
+    lkey, rkey = _norm_key(ldf[lcol]), _norm_key(rdf[rcol])
+
+    # Refuse joins that would explode (many-to-many on a non-unique key) BEFORE building them.
+    lcount, rcount = lkey.value_counts(), rkey.value_counts()
+    matched_pairs = int((lcount * rcount.reindex(lcount.index).fillna(0)).sum())
+    estimated = matched_pairs + (int((~lkey.isin(rkey)).sum()) if how == "left" else 0)
+    limit = min(MAX_JOIN_ROWS, MAX_JOIN_FANOUT * max(len(ldf), len(rdf), 1))
+    if estimated > limit:
+        raise _ToolError(
+            f"Joining on '{lcol}' = '{rcol}' would create ~{estimated:,} rows because the key "
+            "repeats in both tables. Choose a column that is unique in at least one table."
+        )
+
+    # Right-hand columns that clash with the left get the table name as a suffix.
+    clash = {c: f"{c} ({rname})" for c in rdf.columns if c in ldf.columns}
+    merged = (
+        ldf.assign(__key=lkey)
+        .merge(rdf.rename(columns=clash).assign(__key=rkey), on="__key", how=how)
+        .drop(columns="__key")
+        .reset_index(drop=True)
+    )
+    stats = {
+        "left_rows": len(ldf),
+        "right_rows": len(rdf),
+        "left_matched": int(lkey.isin(rkey).sum()),
+        "left_unmatched": int((~lkey.isin(rkey)).sum()),
+        "right_unmatched": int((~rkey.isin(lkey)).sum()),
+        "right_key_unique": bool(not rkey.dropna().duplicated().any()),
+        "renamed_columns": clash,
+    }
+    return f"{lname}_{rname}", merged, stats
+
+
+def build_tools(tables: TableSet | pd.DataFrame) -> list[BaseTool]:
+    """Tools closed over one request's tables. A bare DataFrame is accepted for
+    the single-sheet case and becomes a one-table set named 'sheet'."""
+    if isinstance(tables, pd.DataFrame):
+        tables = TableSet({"sheet": tables})
+
+    def describe_sheet(table: str | None = None) -> str:
         try:
+            names = [table] if table else list(tables.tables)
+            described = []
+            for n in names:
+                name, df = tables.resolve(n)
+                head = df.head(3)
+                described.append(
+                    {
+                        "table": name,
+                        "row_count": len(df),
+                        "columns": describe_schema(df),
+                        "sample_rows": head.astype(object)
+                        .where(head.notna(), None)
+                        .to_dict(orient="records"),
+                    }
+                )
+        except _ToolError as e:
+            return _err(str(e))
+        return _ok(f"{len(described)} table(s) described", tables=described)
+
+    def join_tables(
+        left: str,
+        right: str,
+        left_on: str,
+        right_on: str,
+        how: Literal["inner", "left"] = "inner",
+    ) -> str:
+        try:
+            wanted, merged, stats = _join(tables, left, right, left_on, right_on, how)
+        except _ToolError as e:
+            return _err(str(e))
+        name = tables.register(wanted, merged)
+        note = "" if stats["right_key_unique"] else " (right key repeats — rows may multiply)"
+        return _ok(
+            f"Joined {left} with {right} on {left_on} = {right_on}: {len(merged)} rows; "
+            f"{stats['left_matched']}/{stats['left_rows']} left rows matched, "
+            f"{stats['left_unmatched']} left and {stats['right_unmatched']} right rows "
+            f"had no match{note}. Use table='{name}' for the joined data.",
+            joined_table=name,
+            row_count=len(merged),
+            columns=describe_schema(merged),
+            **stats,
+        )
+
+    def aggregate(
+        column: str, op: Op, table: str | None = None, filters: list[Filter] | None = None
+    ) -> str:
+        try:
+            tname, df = tables.resolve(table)
             col = _resolve(df, column)
             sub = _apply_filters(df, filters)
             if op == "count":
@@ -180,10 +308,11 @@ def build_tools(df: pd.DataFrame) -> list[BaseTool]:
             else:
                 _numeric_only(sub[col])
                 value = _fmt(getattr(sub[col], op)())
-        except _ColumnError as e:
+        except _ToolError as e:
             return _err(str(e))
         return _ok(
-            f"{op} of {col} = {value} (over {len(sub)} rows)",
+            f"{op} of {col} = {value} (over {len(sub)} rows of {tname})",
+            source_table=tname,
             column=col,
             op=op,
             value=value,
@@ -195,9 +324,11 @@ def build_tools(df: pd.DataFrame) -> list[BaseTool]:
         group_column: str,
         value_column: str,
         op: Op = "sum",
+        table: str | None = None,
         filters: list[Filter] | None = None,
     ) -> str:
         try:
+            tname, df = tables.resolve(table)
             g = _resolve(df, group_column)
             v = _resolve(df, value_column)
             sub = _apply_filters(df, filters)
@@ -207,13 +338,14 @@ def build_tools(df: pd.DataFrame) -> list[BaseTool]:
             result = (grouped.count() if op == "count" else getattr(grouped, op)()).sort_values(
                 ascending=False
             )
-        except _ColumnError as e:
+        except _ToolError as e:
             return _err(str(e))
         out = result.reset_index()
         out.columns = [g, f"{op} of {v}"]
         return _ok(
-            f"{op} of {v} by {g} across {len(out)} groups",
+            f"{op} of {v} by {g} across {len(out)} groups (in {tname})",
             table=_table(out, list(out.columns)),
+            source_table=tname,
             groups=len(out),
             rows_used=len(sub),
             headline=None
@@ -225,33 +357,38 @@ def build_tools(df: pd.DataFrame) -> list[BaseTool]:
         column: str,
         n: int = 5,
         order: Literal["desc", "asc"] = "desc",
+        table: str | None = None,
         filters: list[Filter] | None = None,
     ) -> str:
         try:
+            tname, df = tables.resolve(table)
             col = _resolve(df, column)
             sub = _apply_filters(df, filters)
             if not pd.api.types.is_numeric_dtype(sub[col]):
-                raise _ColumnError(f"'{col}' is a text column — rank by a numeric column")
-        except _ColumnError as e:
+                raise _ToolError(f"'{col}' is a text column — rank by a numeric column")
+        except _ToolError as e:
             return _err(str(e))
         n = max(1, min(n, MAX_ROWS_RETURNED))
         top = sub.dropna(subset=[col]).sort_values(col, ascending=order == "asc").head(n)
         return _ok(
-            f"{'Lowest' if order == 'asc' else 'Highest'} {len(top)} rows by {col}",
+            f"{'Lowest' if order == 'asc' else 'Highest'} {len(top)} rows by {col} (in {tname})",
             table=_table(top, [str(c) for c in df.columns]),
+            source_table=tname,
             rows_used=len(sub),
             headline=None if top.empty else _headline(_fmt(top.iloc[0][col]), col),
         )
 
-    def filter_rows(filters: list[Filter], limit: int = 10) -> str:
+    def filter_rows(filters: list[Filter], limit: int = 10, table: str | None = None) -> str:
         try:
+            tname, df = tables.resolve(table)
             sub = _apply_filters(df, filters)
-        except _ColumnError as e:
+        except _ToolError as e:
             return _err(str(e))
         limit = max(1, min(limit, MAX_ROWS_RETURNED))
         return _ok(
-            f"{len(sub)} rows match (showing {min(len(sub), limit)})",
-            table=_table(sub, [str(c) for c in df.columns]),
+            f"{len(sub)} rows match in {tname} (showing {min(len(sub), limit)})",
+            table=_table(sub.head(limit), [str(c) for c in df.columns]),
+            source_table=tname,
             matching_rows=len(sub),
         )
 
@@ -259,8 +396,20 @@ def build_tools(df: pd.DataFrame) -> list[BaseTool]:
         StructuredTool.from_function(
             describe_sheet,
             name="describe_sheet",
-            description="Columns, types, row count and sample rows of the sheet.",
-            args_schema=_NoArgs,
+            description=(
+                "Columns, types, row counts and sample rows. Omit `table` to describe every "
+                "available table."
+            ),
+        ),
+        StructuredTool.from_function(
+            join_tables,
+            name="join_tables",
+            description=(
+                "Combine two tables on a shared key column (e.g. orders.Customer = "
+                "customers.Customer) so a question can use columns from both. Returns a NEW "
+                "table name; pass it as `table` to aggregate, group_by, top_n or filter_rows. "
+                "Use how='left' to keep every row of the left table."
+            ),
         ),
         StructuredTool.from_function(
             aggregate,
@@ -293,15 +442,19 @@ def build_tools(df: pd.DataFrame) -> list[BaseTool]:
 
 def tool_label(name: str, args: dict[str, Any]) -> str:
     """Human-readable step label for the UI."""
+    where = f" in {args['table']}" if args.get("table") else ""
     if name == "describe_sheet":
         return "Reading the sheet structure"
+    if name == "join_tables":
+        left, right, key = args.get("left", ""), args.get("right", ""), args.get("left_on", "")
+        return f"Joining {left} with {right} on {key}"
     if name == "aggregate":
-        return f"Calculating {args.get('op', 'sum')} of {args.get('column', '')}"
+        return f"Calculating {args.get('op', 'sum')} of {args.get('column', '')}{where}"
     if name == "group_by":
-        return f"Grouping {args.get('value_column', '')} by {args.get('group_column', '')}"
+        return f"Grouping {args.get('value_column', '')} by {args.get('group_column', '')}{where}"
     if name == "top_n":
         word = "lowest" if args.get("order") == "asc" else "highest"
-        return f"Finding the {word} {args.get('n', 5)} by {args.get('column', '')}"
+        return f"Finding the {word} {args.get('n', 5)} by {args.get('column', '')}{where}"
     if name == "filter_rows":
-        return "Filtering rows"
+        return f"Filtering rows{where}"
     return name

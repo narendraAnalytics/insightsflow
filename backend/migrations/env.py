@@ -16,6 +16,7 @@ apply_windows_asyncio_fix()  # must run before asyncio.run() below (Windows dev)
 # autogenerate runs.
 from app.db.models import chat as chat_model  # noqa: F401, E402
 from app.db.models import connection as connection_model  # noqa: F401, E402
+from app.db.models import data_source  # noqa: F401, E402
 from app.db.models import user  # noqa: F401, E402
 
 config = context.config

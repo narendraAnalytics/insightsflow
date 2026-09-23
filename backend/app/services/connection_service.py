@@ -109,59 +109,6 @@ async def get_valid_access_token(session: AsyncSession, connection: Connection) 
     return access_token
 
 
-async def select_sheet(
-    session: AsyncSession, clerk_user_id: str, file_id: str, file_name: str
-) -> Connection:
-    connection = await get_connection(session, clerk_user_id)
-    access_token = await get_valid_access_token(session, connection)
-    metadata = await asyncio.to_thread(google_sheets.fetch_sheet_metadata, access_token, file_id)
-
-    connection.google_sheet_id = file_id
-    connection.google_sheet_name = metadata.name or file_name
-    connection.google_sheet_headers = metadata.headers
-    connection.google_sheet_row_count = metadata.row_count
-
-    await session.commit()
-    await session.refresh(connection)
-    return connection
-
-
-async def refresh_sheet_stats(session: AsyncSession, connection: Connection) -> None:
-    """Best-effort: recompute the stored row/column counts from the live sheet
-    so counts saved by an older version (or edits made in Sheets since) don't
-    go stale. Never raises — a failed refresh just keeps the stored values."""
-    if not connection.google_sheet_id:
-        return
-    try:
-        access_token = await get_valid_access_token(session, connection)
-        metadata = await asyncio.to_thread(
-            google_sheets.fetch_sheet_metadata, access_token, connection.google_sheet_id
-        )
-    except Exception:
-        logger.warning("sheet_stats_refresh_failed", exc_info=True)
-        return
-    if (
-        metadata.row_count != connection.google_sheet_row_count
-        or metadata.headers != connection.google_sheet_headers
-    ):
-        connection.google_sheet_row_count = metadata.row_count
-        connection.google_sheet_headers = metadata.headers
-        await session.commit()
-        await session.refresh(connection)
-
-
-async def get_sheet_preview(
-    session: AsyncSession, clerk_user_id: str, max_rows: int = 25
-) -> google_sheets.SheetPreview:
-    connection = await get_connection(session, clerk_user_id)
-    if not connection.google_sheet_id:
-        raise NotFoundError("No spreadsheet selected for this connection yet")
-    access_token = await get_valid_access_token(session, connection)
-    return await asyncio.to_thread(
-        google_sheets.fetch_sheet_preview, access_token, connection.google_sheet_id, max_rows
-    )
-
-
 async def disconnect(session: AsyncSession, clerk_user_id: str) -> None:
     connection = await get_connection(session, clerk_user_id)
     await session.delete(connection)

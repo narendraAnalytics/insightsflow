@@ -9,7 +9,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import NotFoundError
-from app.db.models.chat import ChatConversation, ChatMessage
+from app.db.models.chat import ChatConversation, ChatConversationSource, ChatMessage
 from app.services.connection_service import get_or_create_user
 
 TITLE_MAX = 60
@@ -21,7 +21,7 @@ def make_title(question: str) -> str:
     return text if len(text) <= TITLE_MAX else text[: TITLE_MAX - 1].rstrip() + "…"
 
 
-async def _owned_conversation(
+async def get_owned_conversation(
     session: AsyncSession, clerk_user_id: str, conversation_id: uuid.UUID
 ) -> ChatConversation:
     user = await get_or_create_user(session, clerk_user_id)
@@ -36,20 +36,39 @@ async def _owned_conversation(
     return conversation
 
 
-async def resolve_conversation(
+async def create_conversation(
     session: AsyncSession,
     clerk_user_id: str,
-    conversation_id: uuid.UUID | None,
     first_question: str,
+    source_ids: list[uuid.UUID],
 ) -> ChatConversation:
-    """Existing conversation (ownership-checked) or a new one titled from the question."""
-    if conversation_id is not None:
-        return await _owned_conversation(session, clerk_user_id, conversation_id)
     user = await get_or_create_user(session, clerk_user_id)
     conversation = ChatConversation(user_id=user.id, title=make_title(first_question))
     session.add(conversation)
     await session.flush()
+    session.add_all(
+        ChatConversationSource(conversation_id=conversation.id, data_source_id=sid)
+        for sid in dict.fromkeys(source_ids)
+    )
+    await session.flush()
     return conversation
+
+
+async def source_ids_for(
+    session: AsyncSession, conversation_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, list[uuid.UUID]]:
+    """Sheets each conversation asks about (a removed sheet simply drops out)."""
+    if not conversation_ids:
+        return {}
+    result = await session.execute(
+        select(ChatConversationSource.conversation_id, ChatConversationSource.data_source_id)
+        .where(ChatConversationSource.conversation_id.in_(conversation_ids))
+        .order_by(ChatConversationSource.data_source_id)
+    )
+    grouped: dict[uuid.UUID, list[uuid.UUID]] = {cid: [] for cid in conversation_ids}
+    for conversation_id, source_id in result.all():
+        grouped[conversation_id].append(source_id)
+    return grouped
 
 
 async def history_for(session: AsyncSession, conversation_id: uuid.UUID) -> list[dict[str, str]]:
@@ -108,7 +127,7 @@ async def list_conversations(session: AsyncSession, clerk_user_id: str) -> list[
 async def get_conversation(
     session: AsyncSession, clerk_user_id: str, conversation_id: uuid.UUID
 ) -> tuple[ChatConversation, list[ChatMessage]]:
-    conversation = await _owned_conversation(session, clerk_user_id, conversation_id)
+    conversation = await get_owned_conversation(session, clerk_user_id, conversation_id)
     result = await session.execute(
         select(ChatMessage)
         .where(ChatMessage.conversation_id == conversation.id)
@@ -120,6 +139,6 @@ async def get_conversation(
 async def delete_conversation(
     session: AsyncSession, clerk_user_id: str, conversation_id: uuid.UUID
 ) -> None:
-    conversation = await _owned_conversation(session, clerk_user_id, conversation_id)
+    conversation = await get_owned_conversation(session, clerk_user_id, conversation_id)
     await session.execute(delete(ChatConversation).where(ChatConversation.id == conversation.id))
     await session.commit()

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   ChatsCircle,
@@ -8,6 +8,8 @@ import {
   PaperPlaneRight,
   Robot,
   Sparkle,
+  Link,
+  LockSimple,
   Plus,
   Stop,
   Table,
@@ -15,13 +17,14 @@ import {
   Trash,
   WarningCircle,
 } from "@phosphor-icons/react";
-import { useGoogleSheetsConnection } from "@/hooks/use-google-sheets-connection";
+import { sourceLabel, useGoogleSheetsConnection, type DataSource } from "@/hooks/use-google-sheets-connection";
 import {
   useInsightsChat,
   type ChatMessage,
   type ConversationSummary,
   type Headline,
   type Step,
+  MAX_SOURCES_PER_CHAT,
 } from "@/hooks/use-insights-chat";
 import { TableCard, ValueCard } from "@/components/dashboard/insights/result-card";
 
@@ -319,10 +322,98 @@ function HistoryPanel({
   );
 }
 
+function SourcePicker({
+  sources,
+  selected,
+  locked,
+  removed,
+  disabled,
+  onChange,
+}: {
+  sources: DataSource[];
+  selected: string[];
+  locked: boolean;
+  removed: boolean;
+  disabled: boolean;
+  onChange: (ids: string[]) => void;
+}) {
+  // Once a chat has started it keeps its sheets — show them, don't offer a switch.
+  if (locked) {
+    const used = sources.filter((s) => selected.includes(s.id));
+    return (
+      <div
+        className="mb-5 flex flex-wrap items-center gap-2 self-start"
+        title="A chat keeps the sheets it started with. Start a new chat to use different ones."
+      >
+        <LockSimple weight="bold" className="size-3.5 shrink-0 text-(--flow-magenta)" />
+        {removed || used.length === 0 ? (
+          <span className="text-[13px] font-medium text-(--flow-ink)/60">Sheets removed</span>
+        ) : (
+          used.map((s) => (
+            <span
+              key={s.id}
+              className="max-w-full truncate rounded-full border border-(--flow-cream) bg-(--flow-cream)/80 px-3.5 py-1.5 text-[13px] font-medium text-(--flow-ink)/75"
+              style={{ boxShadow: raised("var(--flow-peach)") }}
+            >
+              {sourceLabel(s)}
+            </span>
+          ))
+        )}
+      </div>
+    );
+  }
+
+  const atLimit = selected.length >= MAX_SOURCES_PER_CHAT;
+  const toggle = (id: string) => {
+    const on = selected.includes(id);
+    if (on && selected.length === 1) return; // a chat needs at least one sheet
+    onChange(on ? selected.filter((x) => x !== id) : sources.filter((s) => s.id === id || selected.includes(s.id)).map((s) => s.id));
+  };
+
+  return (
+    <div className="mb-5 flex max-w-full flex-col gap-2 self-start" role="group" aria-label="Sheets to ask about">
+      <span className="px-1 text-[12.5px] font-medium text-(--flow-ink)/50">
+        {sources.length > 1 ? "Asking about (pick one or more)" : "Asking about"}
+      </span>
+      <div className="flex flex-wrap gap-2">
+        {sources.map((s) => {
+          const on = selected.includes(s.id);
+          return (
+            <button
+              key={s.id}
+              type="button"
+              role="checkbox"
+              aria-checked={on}
+              disabled={disabled || sources.length < 2 || (!on && atLimit)}
+              onClick={() => toggle(s.id)}
+              className={`inline-flex max-w-full items-center gap-2 rounded-full border px-4 py-2 text-[13.5px] font-semibold transition-transform enabled:hover:-translate-y-0.5 enabled:active:scale-[0.97] disabled:cursor-default ${
+                on
+                  ? "bg-gradient-flow border-transparent text-(--flow-cream)"
+                  : "border-(--flow-cream) bg-(--flow-cream)/85 text-(--flow-ink)/75 disabled:opacity-50"
+              }`}
+              style={{ boxShadow: raised("var(--flow-magenta)") }}
+            >
+              {on && <Check weight="bold" className="size-3.5 shrink-0" />}
+              <span className="truncate">{sourceLabel(s)}</span>
+            </button>
+          );
+        })}
+      </div>
+      {selected.length > 1 && (
+        <p className="flex items-center gap-1.5 px-1 text-[12.5px] text-(--flow-ink)/55">
+          <Link weight="bold" className="size-3.5 shrink-0 text-(--flow-magenta)" />
+          Answers can combine these sheets — they&apos;re matched on shared columns like a name or ID.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function InsightsChat() {
   const reduce = useReducedMotion();
   const { connection, loading } = useGoogleSheetsConnection();
-  const ready = connection?.status === "connected" && Boolean(connection.google_sheet_id);
+  const sources = useMemo(() => connection?.sources ?? [], [connection]);
+  const ready = connection?.status === "connected" && sources.length > 0;
   const {
     messages,
     suggestions,
@@ -330,12 +421,15 @@ export function InsightsChat() {
     opening,
     conversationId,
     conversations,
+    sourceIds,
+    setSourceIds,
+    sourceRemoved,
     send,
     stop,
     newChat,
     openConversation,
     removeConversation,
-  } = useInsightsChat(ready);
+  } = useInsightsChat(ready, sources);
   const [historyOpen, setHistoryOpen] = useState(false);
 
   const [draft, setDraft] = useState("");
@@ -397,7 +491,10 @@ export function InsightsChat() {
     );
   }
 
-  const sheetName = suggestions?.sheet_name ?? connection?.google_sheet_name ?? "your sheet";
+  const selectedSources = sources.filter((s) => sourceIds.includes(s.id));
+  const sheetName =
+    suggestions?.sheet_name ??
+    (selectedSources.length > 0 ? selectedSources.map(sourceLabel).join(" + ") : "your sheet");
 
   const historyPanel = (
     <HistoryPanel
@@ -434,6 +531,24 @@ export function InsightsChat() {
       <div className="hidden lg:block">{historyPanel}</div>
 
       <div className="mx-auto flex min-h-[calc(100dvh-9rem)] w-full max-w-3xl min-w-0 flex-col">
+      <SourcePicker
+        sources={sources}
+        selected={sourceIds}
+        locked={conversationId !== null}
+        removed={sourceRemoved}
+        disabled={busy}
+        onChange={setSourceIds}
+      />
+      {sourceRemoved && (
+        <p
+          role="status"
+          className="mb-5 flex items-start gap-2 rounded-2xl bg-(--flow-coral)/12 px-4 py-3 text-[13.5px] font-medium text-(--flow-ink)"
+        >
+          <WarningCircle weight="fill" className="mt-0.5 size-4 shrink-0 text-(--flow-coral)" />
+          This chat&apos;s sheet was removed, so you can read it but not ask new questions. Start a new chat to ask about
+          another sheet.
+        </p>
+      )}
       <div className="flex flex-1 flex-col gap-6 pb-6">
         {opening ? (
           <p className="shimmer-text pt-16 text-center font-heading text-[15px] font-semibold">Opening chat…</p>
@@ -508,7 +623,8 @@ export function InsightsChat() {
             onKeyDown={onKeyDown}
             rows={1}
             maxLength={1000}
-            placeholder="Which region has the highest revenue?"
+            disabled={sourceRemoved}
+            placeholder={sourceRemoved ? "This chat's sheet was removed" : "Which region has the highest revenue?"}
             aria-label="Ask a question about your sheet"
             className="max-h-33 min-h-10 flex-1 resize-none bg-transparent py-2.5 text-[15px] text-(--flow-ink) outline-none placeholder:text-(--flow-ink)/35"
           />
@@ -524,7 +640,7 @@ export function InsightsChat() {
           ) : (
             <button
               type="submit"
-              disabled={!draft.trim()}
+              disabled={!draft.trim() || sourceRemoved}
               aria-label="Send"
               className="bg-gradient-flow flex size-11 shrink-0 items-center justify-center rounded-full text-(--flow-cream) shadow-[0_14px_24px_-10px_var(--flow-magenta)] transition-transform hover:scale-105 active:scale-95 disabled:opacity-45 disabled:hover:scale-100"
             >
