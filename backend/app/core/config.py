@@ -53,6 +53,22 @@ class Settings(BaseSettings):
 
     sentry_dsn: str | None = None
 
+    # Phase 3: Google Sheets OAuth (drive.file scope — see roadmap.txt
+    # "App #1"). google_redirect_uri must exactly match a URI registered on
+    # the OAuth client in Google Cloud Console. oauth_state_secret signs the
+    # OAuth `state` param (app/core/oauth_state.py) so the callback can
+    # recover which user started the flow without needing a bearer token on
+    # that request (it's a top-level browser redirect from Google, not a
+    # fetch(), so no Authorization header is possible).
+    # token_encryption_keys format: "v1:base64fernetkey" — comma-separated
+    # for key rotation, e.g. "v1:oldkey,v2:newkey"; the last entry is used
+    # for new encryptions, all entries are usable for decryption by version.
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_redirect_uri: str | None = None
+    oauth_state_secret: str | None = None
+    token_encryption_keys: str | None = None
+
     @field_validator("cors_origins")
     @classmethod
     def _strip_origins(cls, v: str) -> str:

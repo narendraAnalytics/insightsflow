@@ -10,7 +10,25 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.core.config import get_settings
+
 logger = structlog.get_logger("errors")
+
+
+def _add_cors_headers(request: Request, response: JSONResponse) -> None:
+    """Handlers for the bare `Exception` class run in Starlette's
+    ServerErrorMiddleware, which sits OUTSIDE app.add_middleware(CORSMiddleware)
+    — so without this, any unexpected server error on a cross-origin request
+    (any fetch() from the Next.js frontend) never gets Access-Control-Allow-
+    Origin, and the browser reports a generic "Failed to fetch" instead of
+    surfacing the real 500 body. AppError/HTTPException handlers don't need
+    this — they run inside the normal middleware stack."""
+    origin = request.headers.get("origin")
+    settings = get_settings()
+    if origin and origin in settings.cors_origin_list:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Vary"] = "Origin"
 
 
 class AppError(Exception):
@@ -74,7 +92,9 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
         request_id = request.headers.get("X-Request-ID")
         logger.exception("unhandled_exception", path=request.url.path)
-        return JSONResponse(
+        response = JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=_error_body("internal_error", "Something went wrong", request_id),
         )
+        _add_cors_headers(request, response)
+        return response

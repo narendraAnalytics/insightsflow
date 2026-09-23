@@ -5,10 +5,10 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Plus, Plug, Robot, Sparkle, UploadSimple } from "@phosphor-icons/react";
 
 const actions = [
-  { label: "New Project", icon: Plus, accent: "var(--flow-coral)" },
-  { label: "Connect App", icon: Plug, accent: "var(--flow-lavender)" },
-  { label: "Upload Document", icon: UploadSimple, accent: "var(--flow-cyan)" },
-  { label: "Ask AI", icon: Robot, accent: "var(--flow-magenta)" },
+  { label: "New Project", icon: Plus, accent: "var(--flow-coral)", href: null },
+  { label: "Connect App", icon: Plug, accent: "var(--flow-lavender)", href: "/dashboard/integrations" },
+  { label: "Upload Document", icon: UploadSimple, accent: "var(--flow-cyan)", href: null },
+  { label: "Ask AI", icon: Robot, accent: "var(--flow-magenta)", href: null },
 ];
 
 export function QuickActions() {
@@ -26,23 +26,40 @@ export function QuickActions() {
         Quick Actions
       </h3>
       <div className="mt-4 grid grid-cols-2 gap-3">
-        {actions.map((action) => (
-          <button
-            key={action.label}
-            type="button"
-            onClick={() => handleClick(action.label)}
-            className="flex flex-col items-center gap-2 rounded-2xl py-4 text-center transition-transform hover:scale-[1.03] active:scale-[0.98]"
-            style={{ backgroundColor: `color-mix(in oklab, ${action.accent} 14%, transparent)` }}
-          >
-            <span
-              className="flex size-9 items-center justify-center rounded-full"
-              style={{ backgroundColor: `color-mix(in oklab, ${action.accent} 30%, transparent)` }}
+        {actions.map((action) =>
+          action.href ? (
+            <a
+              key={action.label}
+              href={action.href}
+              className="flex flex-col items-center gap-2 rounded-2xl py-4 text-center transition-transform hover:scale-[1.03] active:scale-[0.98]"
+              style={{ backgroundColor: `color-mix(in oklab, ${action.accent} 14%, transparent)` }}
             >
-              <action.icon weight="bold" className="size-4" style={{ color: action.accent }} />
-            </span>
-            <span className="text-[12.5px] font-semibold text-(--flow-ink)/80">{action.label}</span>
-          </button>
-        ))}
+              <span
+                className="flex size-9 items-center justify-center rounded-full"
+                style={{ backgroundColor: `color-mix(in oklab, ${action.accent} 30%, transparent)` }}
+              >
+                <action.icon weight="bold" className="size-4" style={{ color: action.accent }} />
+              </span>
+              <span className="text-[12.5px] font-semibold text-(--flow-ink)/80">{action.label}</span>
+            </a>
+          ) : (
+            <button
+              key={action.label}
+              type="button"
+              onClick={() => handleClick(action.label)}
+              className="flex flex-col items-center gap-2 rounded-2xl py-4 text-center transition-transform hover:scale-[1.03] active:scale-[0.98]"
+              style={{ backgroundColor: `color-mix(in oklab, ${action.accent} 14%, transparent)` }}
+            >
+              <span
+                className="flex size-9 items-center justify-center rounded-full"
+                style={{ backgroundColor: `color-mix(in oklab, ${action.accent} 30%, transparent)` }}
+              >
+                <action.icon weight="bold" className="size-4" style={{ color: action.accent }} />
+              </span>
+              <span className="text-[12.5px] font-semibold text-(--flow-ink)/80">{action.label}</span>
+            </button>
+          )
+        )}
       </div>
 
       <AnimatePresence>

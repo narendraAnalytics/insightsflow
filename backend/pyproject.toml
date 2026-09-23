@@ -8,8 +8,12 @@ dependencies = [
     "alembic>=1.20.0",
     "celery>=5.6.3",
     "clerk-backend-api>=7.0.0",
+    "cryptography>=44.0.0",
     "duckdb>=1.5.1",
     "fastapi[standard]>=0.141.1",
+    "google-api-python-client>=2.150.0",
+    "google-auth>=2.36.0",
+    "google-auth-oauthlib>=1.2.1",
     "httpx>=0.28.1",
     "langgraph>=1.2.11",
     "langgraph-checkpoint-postgres>=2.0.0",
@@ -38,7 +42,9 @@ dependencies = [
 #                             roles) is implemented
 #   Phase 2 (Razorpay)     -> razorpay
 #   Phase 3 (integrations) -> google-api-python-client, google-auth,
-#                             google-auth-oauthlib, notion-client, slack-sdk
+#                             google-auth-oauthlib (added — Google Sheets
+#                             connect flow); notion-client, slack-sdk still
+#                             deferred until those providers are built
 #   Phase 4 (agent LLM)    -> langchain-sarvam
 # Added when each phase starts, to keep the dependency surface (and CI
 # install time) matched to what's actually implemented.

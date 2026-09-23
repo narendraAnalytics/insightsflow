@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   CaretLeft,
@@ -19,21 +20,22 @@ import { LogoVideo } from "@/components/site/logo-video";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { label: "Dashboard", href: "/dashboard", icon: House, active: true },
-  { label: "Projects", icon: FolderOpen, active: false },
-  { label: "Integrations", icon: Plug, active: false },
-  { label: "AI Insights", icon: Robot, active: false },
-  { label: "Team", icon: UsersThree, active: false },
-  { label: "Documents", icon: FileText, active: false },
-  { label: "Automation", icon: Lightning, active: false },
-  { label: "Analytics", icon: ChartBar, active: false },
-  { label: "Settings", icon: Gear, active: false },
+  { label: "Dashboard", href: "/dashboard", icon: House },
+  { label: "Projects", href: null, icon: FolderOpen },
+  { label: "Integrations", href: "/dashboard/integrations", icon: Plug },
+  { label: "AI Insights", href: null, icon: Robot },
+  { label: "Team", href: null, icon: UsersThree },
+  { label: "Documents", href: null, icon: FileText },
+  { label: "Automation", href: null, icon: Lightning },
+  { label: "Analytics", href: null, icon: ChartBar },
+  { label: "Settings", href: null, icon: Gear },
 ];
 
 const STORAGE_KEY = "insightflow-dashboard-sidebar-collapsed";
 
 export function DashboardSidebar() {
   const [collapsed, setCollapsed] = useState(false);
+  const pathname = usePathname();
 
   useEffect(() => {
     try {
@@ -89,17 +91,20 @@ export function DashboardSidebar() {
 
       <nav className="flex flex-col gap-1">
         {navItems.map((item) =>
-          item.active ? (
+          item.href ? (
             <a
               key={item.label}
               href={item.href}
               title={item.label}
               className={cn(
-                "bg-gradient-flow flex items-center gap-3 rounded-2xl px-3.5 py-2.5 text-[14px] font-semibold whitespace-nowrap text-(--flow-cream) shadow-[0_10px_24px_-14px_rgba(224,90,143,0.6)]",
-                collapsed && "justify-center px-0"
+                "flex items-center gap-3 rounded-2xl px-3.5 py-2.5 text-[14px] font-semibold whitespace-nowrap transition-colors",
+                collapsed && "justify-center px-0",
+                pathname === item.href
+                  ? "bg-gradient-flow text-(--flow-cream) shadow-[0_10px_24px_-14px_rgba(224,90,143,0.6)]"
+                  : "text-(--flow-ink)/70 hover:bg-(--flow-ink)/6"
               )}
             >
-              <item.icon weight="fill" className="size-[18px] shrink-0" />
+              <item.icon weight={pathname === item.href ? "fill" : "regular"} className="size-[18px] shrink-0" />
               {!collapsed && item.label}
             </a>
           ) : (
