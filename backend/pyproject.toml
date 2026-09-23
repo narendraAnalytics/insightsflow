@@ -15,6 +15,7 @@ dependencies = [
     "google-auth>=2.36.0",
     "google-auth-oauthlib>=1.2.1",
     "httpx>=0.28.1",
+    "langchain-sarvam>=0.1.2",
     "langgraph>=1.2.11",
     "langgraph-checkpoint-postgres>=2.0.0",
     "numpy>=2.5.3",

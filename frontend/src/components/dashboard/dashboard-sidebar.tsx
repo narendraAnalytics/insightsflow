@@ -23,7 +23,7 @@ const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: House },
   { label: "Projects", href: null, icon: FolderOpen },
   { label: "Integrations", href: "/dashboard/integrations", icon: Plug },
-  { label: "AI Insights", href: null, icon: Robot },
+  { label: "AI Insights", href: "/dashboard/ai-insights", icon: Robot },
   { label: "Team", href: null, icon: UsersThree },
   { label: "Documents", href: null, icon: FileText },
   { label: "Automation", href: null, icon: Lightning },

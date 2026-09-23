@@ -69,6 +69,12 @@ class Settings(BaseSettings):
     oauth_state_secret: str | None = None
     token_encryption_keys: str | None = None
 
+    # Phase 4: agent LLM (app/agent/llm.py). Reasoning tokens count toward
+    # max_tokens on sarvam-105b, so keep the budget generous.
+    sarvam_api_key: str | None = None
+    sarvam_model: str = "sarvam-105b"
+    sarvam_max_tokens: int = 4096
+
     @field_validator("cors_origins")
     @classmethod
     def _strip_origins(cls, v: str) -> str:

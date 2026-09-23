@@ -170,6 +170,7 @@ dependencies = [
     { name = "google-auth" },
     { name = "google-auth-oauthlib" },
     { name = "httpx" },
+    { name = "langchain-sarvam" },
     { name = "langgraph" },
     { name = "langgraph-checkpoint-postgres" },
     { name = "numpy" },
@@ -212,6 +213,7 @@ requires-dist = [
     { name = "google-auth", specifier = ">=2.36.0" },
     { name = "google-auth-oauthlib", specifier = ">=1.2.1" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "langchain-sarvam", specifier = ">=0.1.2" },
     { name = "langgraph", specifier = ">=1.2.11" },
     { name = "langgraph-checkpoint-postgres", specifier = ">=2.0.0" },
     { name = "numpy", specifier = ">=2.5.3" },
@@ -1331,6 +1333,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/14/56/913599f2f9cec8524868929f12d72b2ede377a6056ca8a40a32bdadfa535/langchain_protocol-0.0.19.tar.gz", hash = "sha256:79d90a1425122ac87e8052e2ec054fbd09c3edbf341bdfb6397112a495c7bf8c", size = 6265, upload-time = "2026-08-26T21:12:00.703Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/80/c9/f6cbf357d48ccbd18bb394433b1fd7ad9be004eed9377ad08bb85777e5e6/langchain_protocol-0.0.19-py3-none-any.whl", hash = "sha256:4cdf879a492a35980fd859ae792d3c65458ccaae504e183c9a10d7eac1f0720f", size = 7327, upload-time = "2026-08-26T21:11:59.781Z" },
+]
+
+[[package]]
+name = "langchain-sarvam"
+version = "0.1.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "langchain-core" },
+    { name = "pydantic" },
+    { name = "sarvamai" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d4/b4/912a88315f34b23e776d286380ec19e3428a19e24fccd94b97fda3a126f3/langchain_sarvam-0.1.2.tar.gz", hash = "sha256:2a0dffb1ec152a27d2d8bc332169327ad16185212089c9b81d9aadf092c64207", size = 14500, upload-time = "2026-07-22T11:47:24.028Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5f/d5/25b21fdab9ba9151d91d2197f6f2d1fbc4fc8c142f9903d000e735fe4afd/langchain_sarvam-0.1.2-py3-none-any.whl", hash = "sha256:175836c4aa22013acf60c9e018cdef7a0e8f50825257a30470424b5928c90e22", size = 11162, upload-time = "2026-07-22T11:47:22.789Z" },
 ]
 
 [[package]]
