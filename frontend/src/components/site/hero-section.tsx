@@ -95,9 +95,12 @@ export function HeroSection() {
               </SignUpButton>
             </Show>
             <Show when="signed-in">
-              <span className="glass-panel inline-flex items-center gap-2 rounded-full px-6 py-3.5 text-[15px] font-semibold text-(--flow-ink)">
+              <a
+                href="/dashboard"
+                className="glass-panel inline-flex items-center gap-2 rounded-full px-6 py-3.5 text-[15px] font-semibold text-(--flow-ink) transition-transform hover:scale-[1.02] active:scale-[0.98]"
+              >
                 Welcome back, <span className="text-gradient-flow">{displayName}</span>
-              </span>
+              </a>
             </Show>
             <a
               href="#how-it-works"
