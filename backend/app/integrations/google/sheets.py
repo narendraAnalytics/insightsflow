@@ -169,18 +169,34 @@ def fetch_sheet_metadata(access_token: str, spreadsheet_id: str) -> SheetMetadat
     title = meta.get("properties", {}).get("title", "Untitled spreadsheet")
     first_sheet = meta["sheets"][0]["properties"]
     first_sheet_title = first_sheet["title"]
-    row_count = first_sheet.get("gridProperties", {}).get("rowCount", 0)
 
-    header_range = f"'{first_sheet_title}'!1:1"
+    # gridProperties.rowCount is the sheet's allocated grid (1000 by default),
+    # not how many rows hold data — read the values instead. A bare sheet-title
+    # range returns only the used range, so this counts real rows.
     values_resp = (
         service.spreadsheets()
         .values()
-        .get(spreadsheetId=spreadsheet_id, range=header_range)
+        .get(spreadsheetId=spreadsheet_id, range=f"'{first_sheet_title}'")
         .execute()
     )
-    headers = values_resp.get("values", [[]])[0] if values_resp.get("values") else []
+    values = values_resp.get("values", [])
+    headers = _clean_headers(values[0]) if values else []
+    row_count = sum(1 for row in values[1:] if _row_has_data(row))
 
-    return SheetMetadata(name=title, headers=headers, row_count=max(row_count - 1, 0))
+    return SheetMetadata(name=title, headers=headers, row_count=row_count)
+
+
+def _row_has_data(row: list[str]) -> bool:
+    return any(str(cell).strip() for cell in row)
+
+
+def _clean_headers(headers: list[str]) -> list[str]:
+    """Drop trailing blank header cells so stray formatted columns don't
+    inflate the column count."""
+    end = len(headers)
+    while end > 0 and not str(headers[end - 1]).strip():
+        end -= 1
+    return headers[:end]
 
 
 @dataclass
@@ -214,8 +230,8 @@ def fetch_sheet_preview(access_token: str, spreadsheet_id: str, max_rows: int = 
     if not values:
         return SheetPreview(headers=[], rows=[])
 
-    headers = values[0]
-    rows = values[1:]
+    headers = _clean_headers(values[0])
+    rows = [row[: len(headers)] for row in values[1:] if _row_has_data(row)]
     # Sheets API drops trailing empty cells per row — pad so every row lines
     # up with the header count for a clean table render.
     padded_rows = [row + [""] * max(0, len(headers) - len(row)) for row in rows]

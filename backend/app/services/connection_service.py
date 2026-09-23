@@ -6,6 +6,7 @@ the first provider; Connection.provider distinguishes others later.
 import asyncio
 from datetime import UTC, datetime
 
+import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +15,8 @@ from app.core.errors import NotFoundError
 from app.db.models.connection import Connection
 from app.db.models.user import User
 from app.integrations.google import sheets as google_sheets
+
+logger = structlog.get_logger(__name__)
 
 
 async def get_or_create_user(session: AsyncSession, clerk_user_id: str) -> User:
@@ -121,6 +124,30 @@ async def select_sheet(
     await session.commit()
     await session.refresh(connection)
     return connection
+
+
+async def refresh_sheet_stats(session: AsyncSession, connection: Connection) -> None:
+    """Best-effort: recompute the stored row/column counts from the live sheet
+    so counts saved by an older version (or edits made in Sheets since) don't
+    go stale. Never raises — a failed refresh just keeps the stored values."""
+    if not connection.google_sheet_id:
+        return
+    try:
+        access_token = await get_valid_access_token(session, connection)
+        metadata = await asyncio.to_thread(
+            google_sheets.fetch_sheet_metadata, access_token, connection.google_sheet_id
+        )
+    except Exception:
+        logger.warning("sheet_stats_refresh_failed", exc_info=True)
+        return
+    if (
+        metadata.row_count != connection.google_sheet_row_count
+        or metadata.headers != connection.google_sheet_headers
+    ):
+        connection.google_sheet_row_count = metadata.row_count
+        connection.google_sheet_headers = metadata.headers
+        await session.commit()
+        await session.refresh(connection)
 
 
 async def get_sheet_preview(

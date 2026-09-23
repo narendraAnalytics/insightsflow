@@ -128,6 +128,7 @@ async def list_connections(
         connection = await connection_service.get_connection(db, principal.user_id)
     except NotFoundError:
         return []
+    await connection_service.refresh_sheet_stats(db, connection)
     return [ConnectionResponse.from_model(connection)]
 
 
