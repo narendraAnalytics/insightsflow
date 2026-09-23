@@ -34,6 +34,7 @@ htmlcov/
 *.md
 *.txt
 !README.md
+*.png
 
 # Claude Code local runtime state — not project source.
 .claude/
