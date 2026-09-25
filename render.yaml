@@ -26,9 +26,9 @@ services:
       - key: CLERK_AUTHORIZED_PARTIES
         value: https://insightsflow.vercel.app
       - key: PUBLIC_API_URL
-        value: https://insightflow-api.onrender.com
+        value: https://insightsflow-zeb7.onrender.com
       - key: GOOGLE_REDIRECT_URI
-        value: https://insightflow-api.onrender.com/api/v1/connections/google/callback
+        value: https://insightsflow-zeb7.onrender.com/api/v1/connections/google/callback
       - key: DATABASE_URL # Neon *production* branch, pooled
         sync: false
       - key: DATABASE_URL_DIRECT # Neon *production* branch, unpooled
