@@ -1,71 +1,67 @@
 "use client";
 
-import { ClockCounterClockwise, FolderOpen, ListChecks, Plug } from "@phosphor-icons/react";
-import { useDashboardStats } from "@/hooks/use-dashboard-stats";
+import { ChatsCircle, FileXls, Plug, Table } from "@phosphor-icons/react";
+import { useDashboardSummary } from "@/hooks/use-dashboard-stats";
 
 const kpiConfig = [
   {
-    key: "totalProjects" as const,
-    deltaKey: "totalProjectsDeltaPct" as const,
-    label: "Total Projects",
-    icon: FolderOpen,
+    label: "Connected Sheets",
+    icon: FileXls,
     accent: "var(--flow-magenta)",
-    format: (n: number) => `${n}`,
+    value: (s: NonNullable<ReturnType<typeof useDashboardSummary>["summary"]>) => s.stats.connected_sheets,
+    note: (s: NonNullable<ReturnType<typeof useDashboardSummary>["summary"]>) =>
+      s.stats.connected_tabs ? `${s.stats.connected_tabs} tab${s.stats.connected_tabs === 1 ? "" : "s"} in total` : "No data yet",
   },
   {
-    key: "activeIntegrations" as const,
-    deltaKey: "activeIntegrationsDeltaPct" as const,
     label: "Active Integrations",
     icon: Plug,
     accent: "var(--flow-cyan)",
-    format: (n: number) => `${n}`,
+    value: (s: NonNullable<ReturnType<typeof useDashboardSummary>["summary"]>) => s.stats.active_integrations,
+    note: (s: NonNullable<ReturnType<typeof useDashboardSummary>["summary"]>) =>
+      s.stats.active_integrations ? "Google Sheets" : "No data yet",
   },
   {
-    key: "tasksCompleted" as const,
-    deltaKey: "tasksCompletedDeltaPct" as const,
-    label: "Tasks Completed",
-    icon: ListChecks,
+    label: "Questions Asked",
+    icon: ChatsCircle,
     accent: "var(--flow-coral)",
-    format: (n: number) => `${n}`,
+    value: (s: NonNullable<ReturnType<typeof useDashboardSummary>["summary"]>) => s.stats.questions_asked,
+    note: (s: NonNullable<ReturnType<typeof useDashboardSummary>["summary"]>) =>
+      s.stats.questions_asked ? "In AI Insights" : "No data yet",
   },
   {
-    key: "timeSavedHours" as const,
-    deltaKey: "timeSavedDeltaPct" as const,
-    label: "Time Saved",
-    icon: ClockCounterClockwise,
+    label: "Data Tabs",
+    icon: Table,
     accent: "var(--flow-lavender)",
-    format: (n: number) => `${n} hrs`,
+    value: (s: NonNullable<ReturnType<typeof useDashboardSummary>["summary"]>) => s.stats.connected_tabs,
+    note: (s: NonNullable<ReturnType<typeof useDashboardSummary>["summary"]>) =>
+      s.stats.connected_tabs ? "Ready to analyse" : "No data yet",
   },
 ];
 
 export function KpiCards() {
-  const { stats } = useDashboardStats();
+  const { summary, isLoading } = useDashboardSummary();
 
   return (
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-      {kpiConfig.map((kpi) => {
-        const value = stats[kpi.key];
-        const delta = stats[kpi.deltaKey];
-        return (
-          <div key={kpi.label} className="glass-card flex flex-col gap-3 rounded-2xl p-5">
-            <span
-              className="flex size-10 items-center justify-center rounded-xl"
-              style={{ backgroundColor: `color-mix(in oklab, ${kpi.accent} 16%, transparent)` }}
-            >
-              <kpi.icon weight="fill" className="size-5" style={{ color: kpi.accent }} />
-            </span>
-            <div>
-              <p className="text-[13px] font-medium text-(--flow-ink)/60">{kpi.label}</p>
-              <p className="mt-0.5 font-heading text-[26px] font-semibold tabular-nums tracking-tight text-(--flow-ink)">
-                {kpi.format(value)}
-              </p>
-            </div>
-            <p className="text-[11.5px] font-medium text-(--flow-ink)/40">
-              {delta === null ? "No data yet" : `↑ ${delta}% from last month`}
+      {kpiConfig.map((kpi) => (
+        <div key={kpi.label} className="glass-card flex flex-col gap-3 rounded-2xl p-5">
+          <span
+            className="flex size-10 items-center justify-center rounded-xl"
+            style={{ backgroundColor: `color-mix(in oklab, ${kpi.accent} 16%, transparent)` }}
+          >
+            <kpi.icon weight="fill" className="size-5" style={{ color: kpi.accent }} />
+          </span>
+          <div>
+            <p className="text-[13px] font-medium text-(--flow-ink)/60">{kpi.label}</p>
+            <p className="mt-0.5 font-heading text-[26px] font-semibold tabular-nums tracking-tight text-(--flow-ink)">
+              {summary ? kpi.value(summary) : isLoading ? "…" : 0}
             </p>
           </div>
-        );
-      })}
+          <p className="text-[11.5px] font-medium text-(--flow-ink)/40">
+            {summary ? kpi.note(summary) : "No data yet"}
+          </p>
+        </div>
+      ))}
     </div>
   );
 }
