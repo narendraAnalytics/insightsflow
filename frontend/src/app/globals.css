@@ -301,3 +301,11 @@
     opacity: 0;
   }
 }
+
+/* Dashboard typography: Plus Jakarta Sans for body and headings. Targets <body>
+   (not just the dashboard wrapper) so portaled dialogs/popovers match too. */
+body:has(.dashboard-root) {
+  --font-bricolage: var(--font-jakarta);
+  font-family: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.005em;
+}
