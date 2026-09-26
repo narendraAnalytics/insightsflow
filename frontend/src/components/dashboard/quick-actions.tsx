@@ -95,8 +95,8 @@ function Tile({ action, index, onSoon }: { action: Action; index: number; onSoon
         className="size-14 object-contain drop-shadow-[0_8px_10px_rgba(120,40,80,0.22)] animate-float-slow transition-transform duration-300 group-hover:scale-115 group-hover:-rotate-6"
         style={{ animationDelay: `${index * -1.4}s` }}
       />
-      <span className="mt-0.5 text-[12.5px] font-semibold leading-tight text-(--flow-ink)">{action.label}</span>
-      <span className="text-[10.5px] leading-none text-(--flow-ink)/55">{action.hint}</span>
+      <span className="mt-0.5 text-[20px] font-(family-name:--font-zeyada) leading-none font-normal text-(--flow-ink)">{action.label}</span>
+      <span className="text-[16px] font-(family-name:--font-zeyada) leading-none font-normal text-(--flow-ink)/55">{action.hint}</span>
     </>
   );
 
@@ -160,7 +160,7 @@ export function QuickActions() {
         className="pointer-events-none absolute -left-8 bottom-6 size-28 rounded-full bg-(--flow-cyan)/30 blur-3xl animate-float-slower"
       />
 
-      <h3 className="relative flex items-center gap-2 font-heading text-[15px] font-semibold text-(--flow-ink)">
+      <h3 className="relative flex items-center gap-2 font-(family-name:--font-zeyada) text-[26px] leading-none font-normal text-(--flow-ink)">
         <Sparkle weight="fill" className="size-4 text-(--flow-magenta) animate-sparkle" />
         Quick Actions
       </h3>
@@ -176,7 +176,7 @@ export function QuickActions() {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
-            className="glass-panel absolute inset-x-5 bottom-3 rounded-full px-4 py-2 text-center text-[12.5px] font-medium text-(--flow-ink)"
+            className="glass-panel absolute inset-x-5 bottom-3 rounded-full px-4 py-2 text-center text-[20px] font-(family-name:--font-zeyada) leading-none font-normal text-(--flow-ink)"
           >
             {toast}
           </motion.div>

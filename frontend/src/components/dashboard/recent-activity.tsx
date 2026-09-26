@@ -23,8 +23,8 @@ export function RecentActivity() {
   return (
     <div className="glass-card flex flex-col rounded-2xl p-5 sm:p-6">
       <div className="flex items-center justify-between">
-        <h3 className="font-heading text-[15px] font-semibold text-(--flow-ink)">Connected Apps</h3>
-        <Link href="/dashboard/integrations" className="text-[12.5px] font-semibold text-(--flow-magenta)">
+        <h3 className="font-(family-name:--font-zeyada) text-[26px] leading-none font-normal text-(--flow-ink)">Connected Apps</h3>
+        <Link href="/dashboard/integrations" className="text-[20px] font-(family-name:--font-zeyada) leading-none font-normal text-(--flow-magenta)">
           View All
         </Link>
       </div>
@@ -33,8 +33,8 @@ export function RecentActivity() {
           <span className="glass-panel flex size-11 items-center justify-center rounded-full">
             <Plug className="size-5 text-(--flow-ink)/40" />
           </span>
-          <p className="text-[13.5px] font-medium text-(--flow-ink)/55">Nothing connected yet</p>
-          <p className="max-w-[220px] text-[12px] text-(--flow-ink)/40">
+          <p className="text-[21px] font-(family-name:--font-zeyada) leading-none font-normal text-(--flow-ink)/55">Nothing connected yet</p>
+          <p className="max-w-[220px] text-[18px] font-(family-name:--font-zeyada) leading-snug font-normal text-(--flow-ink)/40">
             Connect an app from Integrations and it will show up here.
           </p>
         </div>
@@ -46,8 +46,8 @@ export function RecentActivity() {
                 <FileXls weight="fill" className="size-5 text-[#0f9d58]" />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-[13.5px] font-semibold text-(--flow-ink)">{e.title}</p>
-                <p className="truncate text-[12px] text-(--flow-ink)/50">
+                <p className="text-[21px] font-(family-name:--font-zeyada) leading-none font-normal text-(--flow-ink)">{e.title}</p>
+                <p className="truncate text-[18px] font-(family-name:--font-zeyada) leading-none font-normal text-(--flow-ink)/50">
                   {timeAgo(e.at)}
                   {e.detail ? ` · ${e.detail}` : ""}
                 </p>

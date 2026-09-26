@@ -12,12 +12,12 @@ export function UpgradeCard() {
     >
       <Sparkle weight="fill" className="size-5 text-(--flow-cream)" />
       <div>
-        <p className="text-[15px] font-semibold text-(--flow-ink)">Upgrade to Pro</p>
-        <p className="mt-1 text-[12.5px] text-(--flow-ink)/70">Unlock more power with advanced AI features.</p>
+        <p className="text-[26px] font-(family-name:--font-zeyada) leading-none font-normal text-(--flow-ink)">Upgrade to Pro</p>
+        <p className="mt-1 text-[19px] font-(family-name:--font-zeyada) leading-snug font-normal text-(--flow-ink)/70">Unlock more power with advanced AI features.</p>
       </div>
       <button
         type="button"
-        className="glass-panel mt-1 inline-flex w-fit items-center gap-1.5 rounded-full px-4 py-2 text-[12.5px] font-semibold text-(--flow-ink)"
+        className="glass-panel mt-1 inline-flex w-fit items-center gap-1.5 rounded-full px-4 py-2 text-[20px] font-(family-name:--font-zeyada) leading-none font-normal text-(--flow-ink)"
       >
         Upgrade Now
         <ArrowRight weight="bold" className="size-3.5" />
@@ -34,7 +34,7 @@ export function MotivationCard() {
         backgroundImage: "linear-gradient(150deg, var(--flow-coral), var(--flow-magenta) 65%, var(--flow-lavender))",
       }}
     >
-      <p className="max-w-[220px] text-[16px] leading-snug font-semibold text-(--flow-cream)">
+      <p className="max-w-[220px] text-[26px] leading-tight font-normal font-(family-name:--font-zeyada) text-(--flow-cream)">
         Big goals start with small steps.
       </p>
       <span className="glass-panel flex size-9 w-fit items-center justify-center rounded-full">

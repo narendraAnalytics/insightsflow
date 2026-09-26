@@ -9,8 +9,8 @@ export function ProjectActivityChart() {
   return (
     <div className="glass-card flex flex-col rounded-2xl p-5 sm:p-6">
       <div className="flex items-center justify-between">
-        <h3 className="font-heading text-[15px] font-semibold text-(--flow-ink)">Project Activity</h3>
-        <span className="rounded-full bg-(--flow-ink)/6 px-3 py-1 text-[11.5px] font-medium text-(--flow-ink)/45">
+        <h3 className="font-(family-name:--font-zeyada) text-[26px] leading-none font-normal text-(--flow-ink)">Project Activity</h3>
+        <span className="rounded-full bg-(--flow-ink)/6 px-3 py-1 text-[18px] font-(family-name:--font-zeyada) leading-none font-normal text-(--flow-ink)/55">
           Last 7 days
         </span>
       </div>
@@ -18,8 +18,8 @@ export function ProjectActivityChart() {
         <span className="glass-panel flex size-11 items-center justify-center rounded-full">
           <ChartLineUp className="size-5 text-(--flow-ink)/40" />
         </span>
-        <p className="text-[13.5px] font-medium text-(--flow-ink)/55">No activity yet</p>
-        <p className="max-w-[220px] text-[12px] text-(--flow-ink)/40">
+        <p className="text-[21px] font-(family-name:--font-zeyada) leading-none font-normal text-(--flow-ink)/55">No activity yet</p>
+        <p className="max-w-[220px] text-[18px] font-(family-name:--font-zeyada) leading-snug font-normal text-(--flow-ink)/40">
           Connect a project to start tracking tasks and automations here.
         </p>
       </div>

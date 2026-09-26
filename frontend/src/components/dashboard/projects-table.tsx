@@ -13,8 +13,8 @@ export function ProjectsTable() {
   return (
     <div className="glass-card flex flex-col rounded-2xl p-5 sm:p-6">
       <div className="flex items-center justify-between">
-        <h3 className="font-heading text-[15px] font-semibold text-(--flow-ink)">Your Sheets</h3>
-        <Link href="/dashboard/integrations" className="text-[12.5px] font-semibold text-(--flow-ink)/30">
+        <h3 className="font-(family-name:--font-zeyada) text-[26px] leading-none font-normal text-(--flow-ink)">Your Sheets</h3>
+        <Link href="/dashboard/integrations" className="text-[20px] font-(family-name:--font-zeyada) leading-none font-normal text-(--flow-ink)/30">
           View All
         </Link>
       </div>
@@ -30,13 +30,13 @@ export function ProjectsTable() {
           <span className="glass-panel flex size-12 items-center justify-center rounded-full">
             <FolderOpen className="size-5 text-(--flow-ink)/40" />
           </span>
-          <p className="text-[13.5px] font-medium text-(--flow-ink)/55">No sheets yet</p>
-          <p className="max-w-[260px] text-[12px] text-(--flow-ink)/40">
+          <p className="text-[21px] font-(family-name:--font-zeyada) leading-none font-normal text-(--flow-ink)/55">No sheets yet</p>
+          <p className="max-w-[260px] text-[18px] font-(family-name:--font-zeyada) leading-snug font-normal text-(--flow-ink)/40">
             Connect a Google Sheet to see it listed here.
           </p>
           <Link
             href="/dashboard/integrations"
-            className="bg-gradient-flow mt-1 inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-[13px] font-semibold text-(--flow-cream) shadow-[0_10px_22px_-12px_rgba(224,90,143,0.55)] transition-transform hover:scale-[1.03] active:scale-[0.98]"
+            className="bg-gradient-flow mt-1 inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-[21px] font-(family-name:--font-zeyada) leading-none font-normal text-(--flow-cream) shadow-[0_10px_22px_-12px_rgba(224,90,143,0.55)] transition-transform hover:scale-[1.03] active:scale-[0.98]"
           >
             <Plus weight="bold" className="size-3.5" />
             Connect a sheet
