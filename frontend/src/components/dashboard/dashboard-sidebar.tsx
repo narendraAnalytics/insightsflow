@@ -97,7 +97,7 @@ export function DashboardSidebar() {
               href={item.href}
               title={item.label}
               className={cn(
-                "flex items-center gap-3 rounded-2xl px-3.5 py-2.5 text-[14px] font-semibold whitespace-nowrap transition-colors",
+                "flex items-center gap-3 rounded-2xl px-3.5 py-2 font-(family-name:--font-zeyada) text-[22px] leading-none font-normal whitespace-nowrap transition-colors",
                 collapsed && "justify-center px-0",
                 pathname === item.href
                   ? "bg-gradient-flow text-(--flow-cream) shadow-[0_10px_24px_-14px_rgba(224,90,143,0.6)]"
@@ -113,7 +113,7 @@ export function DashboardSidebar() {
               aria-disabled="true"
               title={`${item.label} — coming soon`}
               className={cn(
-                "group flex items-center justify-between gap-3 rounded-2xl px-3.5 py-2.5 text-[14px] font-medium whitespace-nowrap text-(--flow-ink)/45",
+                "group flex items-center justify-between gap-3 rounded-2xl px-3.5 py-2 font-(family-name:--font-zeyada) text-[22px] leading-none font-normal whitespace-nowrap text-(--flow-ink)/45",
                 collapsed && "justify-center px-0"
               )}
             >
