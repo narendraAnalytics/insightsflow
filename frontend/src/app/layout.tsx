@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Bricolage_Grotesque, Geist, Geist_Mono, JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
+import { Bricolage_Grotesque, Geist, Geist_Mono, JetBrains_Mono, Plus_Jakarta_Sans, Zeyada } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 import { cn } from "@/lib/utils";
@@ -24,6 +24,13 @@ const bricolageGrotesque = Bricolage_Grotesque({
 // Dashboard-only UI font (see `body:has(.dashboard-root)` in globals.css).
 const plusJakarta = Plus_Jakarta_Sans({
   variable: "--font-jakarta",
+  subsets: ["latin"],
+});
+
+// Handwritten wordmark in the dashboard sidebar only (single weight, too thin for body text).
+const zeyada = Zeyada({
+  variable: "--font-zeyada",
+  weight: "400",
   subsets: ["latin"],
 });
 
@@ -56,6 +63,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         geistMono.variable,
         bricolageGrotesque.variable,
         plusJakarta.variable,
+        zeyada.variable,
         "font-sans",
         jetbrainsMono.variable
       )}

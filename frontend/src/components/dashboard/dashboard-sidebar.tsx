@@ -83,7 +83,7 @@ export function DashboardSidebar() {
       >
         <LogoVideo className="h-8 w-8 shrink-0" />
         {!collapsed && (
-          <span className="text-[16px] font-semibold tracking-tight whitespace-nowrap text-(--flow-ink)">
+          <span className="font-(family-name:--font-zeyada) text-[30px] leading-none whitespace-nowrap text-(--flow-ink)">
             InsightFlow
           </span>
         )}

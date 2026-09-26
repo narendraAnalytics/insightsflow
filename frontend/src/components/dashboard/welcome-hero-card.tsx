@@ -14,7 +14,7 @@ export function WelcomeHeroCard() {
   }, []);
 
   return (
-    <div className="glass-panel relative isolate flex flex-col justify-center overflow-hidden rounded-3xl px-7 pt-20 pb-14 sm:px-9 sm:pt-24 sm:pb-14">
+    <div className="glass-panel relative isolate flex flex-col justify-center overflow-hidden rounded-3xl px-7 pt-20 pb-2.5 sm:px-9 sm:pt-24 sm:pb-2.5">
       <video
         ref={videoRef}
         aria-hidden="true"
