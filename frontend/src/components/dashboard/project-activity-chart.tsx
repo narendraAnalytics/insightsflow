@@ -17,8 +17,8 @@ function weekdayLabel(iso: string) {
 function TooltipCard({ active, payload, label }: { active?: boolean; payload?: { dataKey: string; value: number }[]; label?: string }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="glass-panel rounded-xl px-3 py-2 text-[13px] leading-snug font-medium text-(--flow-ink)">
-      <p className="text-(--flow-ink)/60">{label}</p>
+    <div className="glass-panel rounded-xl px-3 py-2 font-(family-name:--font-zeyada) text-[19px] leading-snug font-normal text-(--flow-ink)">
+      <p className="text-[17px] text-(--flow-ink)/60">{label}</p>
       {SERIES.map((s) => {
         const entry = payload.find((p) => p.dataKey === s.key);
         if (!entry || entry.value === 0) return null;
@@ -86,7 +86,7 @@ export function ProjectActivityChart() {
                   dataKey="label"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 12, fill: "var(--flow-ink)", opacity: 0.55 }}
+                  tick={{ fontSize: 15, fontFamily: "var(--font-zeyada)", fill: "var(--flow-ink)", opacity: 0.55 }}
                   dy={6}
                 />
                 <Tooltip content={<TooltipCard />} cursor={{ stroke: "var(--flow-ink)", strokeOpacity: 0.15 }} />
@@ -106,7 +106,7 @@ export function ProjectActivityChart() {
           </div>
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
             {SERIES.map((s) => (
-              <span key={s.key} className="flex items-center gap-1.5 text-[13px] font-medium text-(--flow-ink)/60">
+              <span key={s.key} className="flex items-center gap-1.5 font-(family-name:--font-zeyada) text-[19px] leading-none font-normal text-(--flow-ink)/60">
                 <span className="size-2 rounded-full" style={{ backgroundColor: s.color }} />
                 {s.label}
               </span>
