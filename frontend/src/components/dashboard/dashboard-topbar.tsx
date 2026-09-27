@@ -28,10 +28,9 @@ export function DashboardTopbar() {
           <Bell weight="bold" className="size-[19px]" />
         </button>
 
-        <div className="flex flex-col items-end pl-1 leading-tight">
-          <span className="text-[13.5px] font-semibold text-(--flow-ink)">{displayName}</span>
-          <span className="text-[11px] font-medium text-(--flow-ink)/50">Free Plan</span>
-        </div>
+        <span className="text-gradient-flow pl-1 font-(family-name:--font-zeyada) text-[30px] leading-none font-normal whitespace-nowrap">
+          {displayName}
+        </span>
       </div>
     </header>
   );

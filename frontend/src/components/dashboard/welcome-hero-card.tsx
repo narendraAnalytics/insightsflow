@@ -40,14 +40,23 @@ export function WelcomeHeroCard() {
         }}
       />
 
-      <div className="max-w-md">
-        <h1 className="text-[1.9rem] leading-tight font-semibold tracking-tight text-(--flow-ink) sm:text-4xl">
+      <div className="max-w-lg">
+        <h1
+          className="font-(family-name:--font-zeyada) text-[2.75rem] leading-none font-normal sm:text-[3.5rem]"
+          style={{
+            backgroundImage: "linear-gradient(100deg, var(--flow-magenta) 0%, oklch(0.66 0.21 10) 55%, var(--flow-coral) 100%)",
+            WebkitBackgroundClip: "text",
+            backgroundClip: "text",
+            color: "transparent",
+            filter: "drop-shadow(0 2px 10px rgb(255 255 255 / 0.55))",
+          }}
+        >
           Welcome back, {firstName}! <span aria-hidden="true">👋</span>
         </h1>
-        <p className="mt-3 text-[15px] text-(--flow-ink)/70">
+        <p className="mt-3 font-(family-name:--font-zeyada) text-[26px] leading-snug font-normal text-(--flow-magenta)">
           Turn your ideas into impact with AI-powered workflows.
         </p>
-        <p className="mt-4 text-[13.5px] font-medium text-(--flow-ink)/55 italic">
+        <p className="mt-3 font-(family-name:--font-zeyada) text-[24px] leading-none font-normal text-(--flow-coral)">
           &ldquo;Automate today. Achieve tomorrow.&rdquo;
         </p>
       </div>
