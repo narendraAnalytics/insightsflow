@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils";
 // the icon tile at rest and becomes the gradient when the item is active.
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: House, accent: "var(--flow-magenta)" },
-  { label: "Projects", href: null, icon: FolderOpen, accent: "oklch(0.72 0.17 55)" },
+  { label: "Projects", href: "/dashboard/projects", icon: FolderOpen, accent: "oklch(0.72 0.17 55)" },
   { label: "Integrations", href: "/dashboard/integrations", icon: Plug, accent: "oklch(0.66 0.12 190)" },
   { label: "AI Insights", href: "/dashboard/ai-insights", icon: Robot, accent: "oklch(0.66 0.21 10)" },
   { label: "Team", href: null, icon: UsersThree, accent: "oklch(0.64 0.22 330)" },

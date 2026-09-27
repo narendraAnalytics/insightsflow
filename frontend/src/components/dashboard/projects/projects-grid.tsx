@@ -1,0 +1,199 @@
+"use client";
+
+import Link from "next/link";
+import { motion } from "framer-motion";
+import { ChatCircleText, FolderOpen, Plug, Plus, Stack } from "@phosphor-icons/react";
+import { GoogleSheetsGlyph } from "@/components/site/brand-icons";
+import { sourceLabel, useGoogleSheetsConnection, type DataSource } from "@/hooks/use-google-sheets-connection";
+
+const Z = "font-(family-name:--font-zeyada)";
+
+// One project = one spreadsheet (its tabs grouped together). Deep, bright
+// accents (no blue/violet) so neighbouring project cards read apart at a glance.
+const accents = [
+  "var(--flow-magenta)",
+  "oklch(0.66 0.12 190)",
+  "oklch(0.72 0.17 55)",
+  "oklch(0.66 0.21 10)",
+  "oklch(0.68 0.15 160)",
+  "oklch(0.64 0.22 330)",
+];
+
+type Project = {
+  spreadsheetId: string;
+  name: string;
+  tabs: DataSource[];
+  rowCount: number;
+  syncedAt: string;
+};
+
+function groupProjects(sources: DataSource[]): Project[] {
+  const bySheet = new Map<string, DataSource[]>();
+  for (const s of sources) {
+    const list = bySheet.get(s.spreadsheet_id) ?? [];
+    list.push(s);
+    bySheet.set(s.spreadsheet_id, list);
+  }
+  return [...bySheet.entries()].map(([spreadsheetId, tabs]) => ({
+    spreadsheetId,
+    name: tabs[0].name,
+    tabs,
+    rowCount: tabs.reduce((sum, t) => sum + t.row_count, 0),
+    syncedAt: tabs.reduce((latest, t) => (t.synced_at > latest ? t.synced_at : latest), tabs[0].synced_at),
+  }));
+}
+
+/** The apps a project can be built from. Google Sheets is live; the rest are
+ * placeholders so the "more apps soon" promise stays visible without faking data. */
+const APP_CHIPS: { label: string; live: boolean }[] = [
+  { label: "Google Sheets", live: true },
+  { label: "Notion", live: false },
+  { label: "Slack", live: false },
+];
+
+function ConnectedAppsRow() {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className={`${Z} text-[20px] leading-none font-normal text-(--flow-ink)/70`}>Connected apps</span>
+      {APP_CHIPS.map((app) => (
+        <span
+          key={app.label}
+          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 ${Z} text-[19px] leading-none font-normal ${
+            app.live
+              ? "bg-(--flow-cyan)/20 text-(--flow-ink)"
+              : "bg-(--flow-ink)/6 text-(--flow-ink)/40"
+          }`}
+        >
+          {app.live && <span className="size-1.5 rounded-full bg-(--flow-cyan)" />}
+          {app.label}
+          {!app.live && <span className="text-[15px]">· soon</span>}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function ProjectCard({ project, accent, index }: { project: Project; accent: string; index: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay: index * 0.06, ease: "easeOut" }}
+      className="relative isolate flex flex-col gap-4 overflow-hidden rounded-[26px] border border-(--flow-cream) bg-(--flow-cream) p-6"
+      style={{
+        boxShadow: `0 24px 40px -26px color-mix(in oklab, ${accent} 60%, transparent), inset 3px 0 0 ${accent}, inset 0 1px 0 rgb(255 255 255 / 0.8)`,
+      }}
+    >
+      <span
+        aria-hidden
+        className="pointer-events-none absolute -top-10 -right-10 -z-10 size-44 rounded-full blur-3xl"
+        style={{ backgroundColor: `color-mix(in oklab, ${accent} 22%, transparent)` }}
+      />
+
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span
+            className="flex size-12 items-center justify-center rounded-2xl bg-(--flow-cream)"
+            style={{ boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${accent} 30%, transparent)` }}
+          >
+            <GoogleSheetsGlyph className="size-6" />
+          </span>
+          <div className="min-w-0">
+            <p className={`truncate ${Z} text-[30px] leading-none font-normal text-(--flow-ink)`}>{project.name}</p>
+            <p className={`mt-1 ${Z} text-[19px] leading-none font-normal`} style={{ color: accent }}>
+              {project.tabs.length} tab{project.tabs.length === 1 ? "" : "s"} · updated{" "}
+              {new Date(project.syncedAt).toLocaleDateString()}
+            </p>
+          </div>
+        </div>
+        <span
+          className={`shrink-0 rounded-full px-3 py-1 ${Z} text-[22px] leading-none font-normal tabular-nums`}
+          style={{ backgroundColor: `color-mix(in oklab, ${accent} 16%, transparent)`, color: accent }}
+        >
+          {project.rowCount.toLocaleString("en-IN")} rows
+        </span>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {project.tabs.map((tab) => (
+          <span
+            key={tab.id}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 ${Z} text-[19px] leading-none font-normal`}
+            style={{ backgroundColor: `color-mix(in oklab, ${accent} 14%, transparent)`, color: "var(--flow-ink)" }}
+          >
+            <Stack weight="duotone" className="size-3.5 shrink-0" style={{ color: accent }} />
+            {tab.tab_title || sourceLabel(tab)}
+          </span>
+        ))}
+      </div>
+
+      <ConnectedAppsRow />
+
+      <div className="mt-1 flex flex-wrap items-center gap-3">
+        <Link
+          href="/dashboard/ai-insights"
+          className={`inline-flex items-center gap-2 rounded-full px-4 py-2 ${Z} text-[22px] leading-none font-normal text-(--flow-cream)`}
+          style={{
+            backgroundImage: `linear-gradient(120deg, ${accent}, color-mix(in oklab, ${accent} 55%, var(--flow-coral)))`,
+            boxShadow: `0 12px 22px -12px color-mix(in oklab, ${accent} 65%, transparent)`,
+          }}
+        >
+          <ChatCircleText weight="bold" className="size-4" />
+          Ask AI
+        </Link>
+        <Link
+          href="/dashboard/integrations"
+          className={`inline-flex items-center gap-1.5 ${Z} text-[21px] leading-none font-normal text-(--flow-ink)/65 transition-colors hover:text-(--flow-ink)`}
+        >
+          <Plug weight="bold" className="size-3.5" />
+          Manage in Integrations
+        </Link>
+      </div>
+    </motion.div>
+  );
+}
+
+export function ProjectsGrid() {
+  const { connection, loading } = useGoogleSheetsConnection();
+  const sources = connection?.sources ?? [];
+  const projects = groupProjects(sources);
+
+  if (loading) {
+    return <p className={`${Z} px-2 text-[24px] leading-none text-(--flow-ink)/70`}>Loading…</p>;
+  }
+
+  if (projects.length === 0) {
+    return (
+      <div
+        className="mx-auto mt-6 flex max-w-md flex-col items-center gap-4 rounded-[28px] border border-(--flow-cream) bg-(--flow-cream) p-8 text-center"
+        style={{ boxShadow: "0 24px 40px -26px color-mix(in oklab, var(--flow-magenta) 45%, transparent)" }}
+      >
+        <span className="flex size-16 items-center justify-center rounded-[20px] bg-linear-to-br from-(--flow-cream) to-(--flow-peach)">
+          <FolderOpen weight="duotone" className="size-8 text-(--flow-magenta)" />
+        </span>
+        <div>
+          <p className={`text-gradient-flow ${Z} text-[36px] leading-none font-normal`}>No projects yet</p>
+          <p className={`mt-2 ${Z} text-[23px] leading-snug font-normal text-(--flow-ink)/80`}>
+            Connect a Google Sheet and it shows up here as a project — Notion and Slack are coming next.
+          </p>
+        </div>
+        <Link
+          href="/dashboard/integrations"
+          className={`bg-gradient-flow inline-flex items-center gap-2 rounded-full px-6 py-2.5 ${Z} text-[24px] leading-none font-normal text-(--flow-cream)`}
+          style={{ boxShadow: "0 18px 30px -14px var(--flow-magenta)" }}
+        >
+          <Plus weight="bold" className="size-4" />
+          Connect a sheet
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-3">
+      {projects.map((project, i) => (
+        <ProjectCard key={project.spreadsheetId} project={project} accent={accents[i % accents.length]} index={i} />
+      ))}
+    </div>
+  );
+}
