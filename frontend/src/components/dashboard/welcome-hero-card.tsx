@@ -40,18 +40,23 @@ export function WelcomeHeroCard() {
         }}
       />
 
-      <div className="max-w-lg">
-        <h1
-          className="font-(family-name:--font-zeyada) text-[2.75rem] leading-none font-normal sm:text-[3.5rem]"
-          style={{
-            backgroundImage: "linear-gradient(100deg, var(--flow-magenta) 0%, oklch(0.66 0.21 10) 55%, var(--flow-coral) 100%)",
-            WebkitBackgroundClip: "text",
-            backgroundClip: "text",
-            color: "transparent",
-            filter: "drop-shadow(0 2px 10px rgb(255 255 255 / 0.55))",
-          }}
-        >
-          Welcome back, {firstName}! <span aria-hidden="true">👋</span>
+      <div className="max-w-2xl">
+        <h1 className="font-(family-name:--font-zeyada) text-[2.75rem] leading-none font-normal sm:text-[3.5rem]">
+          <span
+            style={{
+              backgroundImage: "linear-gradient(100deg, var(--flow-magenta) 0%, oklch(0.66 0.21 10) 55%, var(--flow-coral) 100%)",
+              WebkitBackgroundClip: "text",
+              backgroundClip: "text",
+              color: "transparent",
+              filter: "drop-shadow(0 2px 10px rgb(255 255 255 / 0.55))",
+            }}
+          >
+            Welcome back, {firstName}!
+          </span>
+          {/* emoji lives outside the clipped span so it keeps its own colours, and stays on the same line */}
+          <span aria-hidden="true" className="ml-2 inline-block align-middle text-[0.8em]">
+            👋
+          </span>
         </h1>
         <p className="mt-3 font-(family-name:--font-zeyada) text-[26px] leading-snug font-normal text-(--flow-magenta)">
           Turn your ideas into impact with AI-powered workflows.
