@@ -38,10 +38,18 @@ class SourceOut(BaseModel):
     synced_at: datetime
 
 
+class DailyActivityOut(BaseModel):
+    date: str
+    connections: int
+    sources: int
+    chats: int
+
+
 class DashboardSummary(BaseModel):
     stats: StatsOut
     activity: list[ActivityOut]
     sources: list[SourceOut]
+    daily_activity: list[DailyActivityOut]
 
 
 @router.get("/summary", response_model=DashboardSummary)
@@ -53,6 +61,7 @@ async def summary(
     stats = await dashboard_service.get_stats(db, user.id)
     events = await dashboard_service.recent_activity(db, user.id)
     sources = await dashboard_service.list_sources(db, user.id)
+    daily = await dashboard_service.daily_activity(db, user.id)
     return DashboardSummary(
         stats=StatsOut(**stats.__dict__),
         activity=[ActivityOut(**e.__dict__) for e in events],
@@ -66,4 +75,5 @@ async def summary(
             )
             for s in sources
         ],
+        daily_activity=[DailyActivityOut(**d.__dict__) for d in daily],
     )

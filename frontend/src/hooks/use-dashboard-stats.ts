@@ -13,6 +13,7 @@ export type DashboardSummary = {
   };
   activity: { kind: "connection" | "source" | "chat"; title: string; detail: string | null; at: string }[];
   sources: { id: string; name: string; tab_title: string; row_count: number; synced_at: string }[];
+  daily_activity: { date: string; connections: number; sources: number; chats: number }[];
 };
 
 // The KPI cards, activity feed and sources table all read the same summary;

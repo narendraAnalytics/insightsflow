@@ -4,7 +4,7 @@ separate activity-log table: every event here is a row's own `created_at`."""
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 from sqlalchemy import Select, func, select
@@ -15,6 +15,7 @@ from app.db.models.connection import Connection
 from app.db.models.data_source import DataSource
 
 ACTIVITY_LIMIT = 8
+DAILY_ACTIVITY_DAYS = 7
 
 
 @dataclass
@@ -31,6 +32,14 @@ class ActivityEvent:
     title: str
     detail: str | None
     at: datetime
+
+
+@dataclass
+class DailyActivity:
+    date: str  # YYYY-MM-DD
+    connections: int
+    sources: int
+    chats: int
 
 
 async def _count(db: AsyncSession, stmt: Select[Any]) -> int:
@@ -118,3 +127,58 @@ async def recent_activity(db: AsyncSession, user_id: uuid.UUID) -> list[Activity
 
     events.sort(key=lambda e: e.at, reverse=True)
     return events[:ACTIVITY_LIMIT]
+
+
+async def _counts_by_day(
+    db: AsyncSession, stmt: Select[Any]
+) -> dict[str, int]:
+    rows = await db.execute(stmt)
+    return {str(day): int(count) for day, count in rows.all()}
+
+
+async def daily_activity(db: AsyncSession, user_id: uuid.UUID) -> list[DailyActivity]:
+    """Connections/sources/questions created per day, last DAILY_ACTIVITY_DAYS days
+    (zero-filled — there's no activity-log table, so a quiet day is just an absence
+    of rows, not a stored zero)."""
+    today = datetime.now(UTC).date()
+    start_day = today - timedelta(days=DAILY_ACTIVITY_DAYS - 1)
+    since = datetime.combine(start_day, time.min, tzinfo=UTC)
+
+    connections = await _counts_by_day(
+        db,
+        select(func.date(Connection.created_at), func.count())
+        .where(Connection.user_id == user_id, Connection.created_at >= since)
+        .group_by(func.date(Connection.created_at)),
+    )
+    sources = await _counts_by_day(
+        db,
+        select(func.date(DataSource.created_at), func.count())
+        .where(DataSource.user_id == user_id, DataSource.created_at >= since)
+        .group_by(func.date(DataSource.created_at)),
+    )
+    chats = await _counts_by_day(
+        db,
+        select(func.date(ChatMessage.created_at), func.count())
+        .select_from(ChatMessage)
+        .join(ChatConversation, ChatConversation.id == ChatMessage.conversation_id)
+        .where(
+            ChatConversation.user_id == user_id,
+            ChatMessage.role == "user",
+            ChatMessage.created_at >= since,
+        )
+        .group_by(func.date(ChatMessage.created_at)),
+    )
+
+    days: list[DailyActivity] = []
+    for offset in range(DAILY_ACTIVITY_DAYS):
+        day: date = today - timedelta(days=DAILY_ACTIVITY_DAYS - 1 - offset)
+        key = str(day)
+        days.append(
+            DailyActivity(
+                date=key,
+                connections=connections.get(key, 0),
+                sources=sources.get(key, 0),
+                chats=chats.get(key, 0),
+            )
+        )
+    return days

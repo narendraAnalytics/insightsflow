@@ -10,7 +10,7 @@ const actions = [
     hint: "Start fresh",
     icon: "https://res.cloudinary.com/dkqbzwicr/image/upload/v1790426376/projecticon_ebiw8k.png",
     accent: "var(--flow-coral)",
-    href: null,
+    href: "/dashboard/projects",
   },
   {
     label: "Connect App",
