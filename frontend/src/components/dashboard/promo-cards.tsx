@@ -28,16 +28,29 @@ export function UpgradeCard() {
 
 export function MotivationCard() {
   return (
-    <div
-      className="relative flex flex-col justify-between gap-4 overflow-hidden rounded-2xl p-5"
-      style={{
-        backgroundImage: "linear-gradient(150deg, var(--flow-coral), var(--flow-magenta) 65%, var(--flow-lavender))",
-      }}
-    >
-      <p className="max-w-[220px] text-[26px] leading-tight font-normal font-(family-name:--font-zeyada) text-(--flow-cream)">
+    <div className="group relative isolate flex min-h-80 flex-1 flex-col justify-between gap-4 overflow-hidden rounded-2xl p-5 shadow-[0_14px_30px_-16px_rgba(224,90,143,0.55)]">
+      {/* full-bleed scene, cropped to the card; slow zoom on hover */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="https://res.cloudinary.com/dkqbzwicr/image/upload/v1790482377/growthimagesteps_yspjyt.png"
+        alt=""
+        aria-hidden
+        draggable={false}
+        className="pointer-events-none absolute inset-0 -z-20 size-full object-cover object-[50%_50%] transition-transform duration-700 ease-out group-hover:scale-110"
+      />
+      {/* brand-tinted scrim keeps the cream text readable without dimming the whole scene */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-0 -z-10"
+        style={{
+          backgroundImage:
+            "linear-gradient(135deg, color-mix(in oklab, var(--flow-magenta) 78%, transparent) 0%, color-mix(in oklab, var(--flow-coral) 42%, transparent) 42%, transparent 75%)",
+        }}
+      />
+      <p className="max-w-[220px] text-[26px] leading-tight font-normal font-(family-name:--font-zeyada) text-(--flow-cream) drop-shadow-[0_2px_8px_rgba(120,30,70,0.45)]">
         Big goals start with small steps.
       </p>
-      <span className="glass-panel flex size-9 w-fit items-center justify-center rounded-full">
+      <span className="glass-panel flex size-9 w-fit items-center justify-center rounded-full transition-transform duration-300 group-hover:translate-x-1">
         <ArrowCircleRight weight="fill" className="size-5 text-(--flow-cream)" />
       </span>
     </div>

@@ -23,7 +23,7 @@ export default function DashboardPage() {
       <div className="flex flex-col gap-5">
         <QuickActions />
         <RecentActivity />
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-1">
+        <div className="flex flex-1 flex-col gap-4">
           <UpgradeCard />
           <MotivationCard />
         </div>
