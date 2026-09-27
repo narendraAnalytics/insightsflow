@@ -12,35 +12,39 @@ const kpiConfig = [
   {
     label: "Connected Sheets",
     icon: FileXls,
+    image: "https://res.cloudinary.com/dkqbzwicr/image/upload/v1790443280/googlesheet_gdwkfb.png",
     accent: "var(--flow-magenta)",
     href: "/dashboard/integrations",
     value: (s: Summary) => s.stats.connected_sheets,
     note: (s: Summary) =>
-      s.stats.connected_tabs ? `${s.stats.connected_tabs} tab${s.stats.connected_tabs === 1 ? "" : "s"} in total` : "No data yet",
+      s.stats.connected_tabs ? `${s.stats.connected_tabs} tab${s.stats.connected_tabs === 1 ? "" : "s"} in total` : "Connect a sheet →",
   },
   {
     label: "Active Integrations",
     icon: Plug,
+    image: "https://res.cloudinary.com/dkqbzwicr/image/upload/v1790443462/activeintrgrations_uoycu0.png",
     accent: "var(--flow-cyan)",
     href: "/dashboard/integrations",
     value: (s: Summary) => s.stats.active_integrations,
-    note: (s: Summary) => (s.stats.active_integrations ? "Google Sheets" : "No data yet"),
+    note: (s: Summary) => (s.stats.active_integrations ? "Google Sheets" : "Connect Google →"),
   },
   {
     label: "Questions Asked",
     icon: ChatsCircle,
+    image: "https://res.cloudinary.com/dkqbzwicr/image/upload/v1790480582/askquestions_l6sde7.png",
     accent: "var(--flow-coral)",
     href: "/dashboard/ai-insights",
     value: (s: Summary) => s.stats.questions_asked,
-    note: (s: Summary) => (s.stats.questions_asked ? "In AI Insights" : "No data yet"),
+    note: (s: Summary) => (s.stats.questions_asked ? "In AI Insights" : "Ask your first →"),
   },
   {
     label: "Data Tabs",
     icon: Table,
+    image: "https://res.cloudinary.com/dkqbzwicr/image/upload/v1790480735/datatabs_xio7th.png",
     accent: "var(--flow-lavender)",
     href: "/dashboard/integrations",
     value: (s: Summary) => s.stats.connected_tabs,
-    note: (s: Summary) => (s.stats.connected_tabs ? "Ready to analyse" : "No data yet"),
+    note: (s: Summary) => (s.stats.connected_tabs ? "Ready to analyse" : "Add a tab →"),
   },
 ];
 
@@ -99,8 +103,10 @@ function KpiCard({
         ref={ref}
         href={kpi.href}
         onPointerMove={track}
-        className="glass-card group relative isolate flex h-full flex-col gap-4 overflow-hidden rounded-2xl p-5 outline-none transition-[transform,box-shadow] duration-300 hover:-translate-y-1 focus-visible:ring-2 focus-visible:ring-(--flow-magenta) active:scale-[0.98]"
-        style={{ boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${kpi.accent} 20%, transparent)` }}
+        className="glass-card group relative isolate flex h-full flex-col gap-4 overflow-hidden rounded-2xl p-5 outline-none transition-[transform,box-shadow] duration-300 hover:-translate-y-1.5 focus-visible:ring-2 focus-visible:ring-(--flow-magenta) active:scale-[0.98]"
+        style={{
+          boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${kpi.accent} 20%, transparent), inset 0 1px 0 rgb(255 255 255 / 0.65), 0 10px 28px -14px color-mix(in oklab, ${kpi.accent} 55%, transparent)`,
+        }}
       >
         {/* aurora corner glow */}
         <span
@@ -125,15 +131,15 @@ function KpiCard({
         />
 
         <div className="flex items-start justify-between">
-          <span
-            className="relative flex size-11 items-center justify-center rounded-xl"
-            style={{
-              backgroundColor: `color-mix(in oklab, ${kpi.accent} 18%, transparent)`,
-              boxShadow: `inset 0 0 0 1px color-mix(in oklab, ${kpi.accent} 30%, transparent)`,
-            }}
-          >
-            <kpi.icon weight="fill" className="size-5" style={{ color: kpi.accent }} />
-          </span>
+          {/* transparent 3D icon sitting directly on the card */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={kpi.image}
+            alt=""
+            aria-hidden
+            draggable={false}
+            className="-mt-1 -ml-1 size-16 object-contain drop-shadow-[0_8px_10px_rgba(120,60,80,0.22)] transition-transform duration-500 group-hover:-translate-y-1 group-hover:scale-110 group-hover:-rotate-3"
+          />
           <span
             className="flex size-7 items-center justify-center rounded-full opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100 -translate-x-1"
             style={{ backgroundColor: `color-mix(in oklab, ${kpi.accent} 20%, transparent)`, color: kpi.accent }}
@@ -143,8 +149,8 @@ function KpiCard({
         </div>
 
         <div>
-          <p className="font-(family-name:--font-zeyada) text-[22px] leading-none font-normal text-(--flow-ink)/70">{kpi.label}</p>
-          <p className="mt-1.5 font-(family-name:--font-zeyada) text-[44px] leading-none font-normal tabular-nums text-(--flow-ink)">
+          <p className="font-(family-name:--font-zeyada) text-[22px] leading-none font-normal text-(--flow-ink)/85">{kpi.label}</p>
+          <p className="mt-1.5 font-(family-name:--font-zeyada) text-[52px] leading-none font-normal tabular-nums text-(--flow-ink)">
             {summary ? <CountUp value={value} reduce={reduce} /> : isLoading ? "…" : 0}
           </p>
         </div>
@@ -165,8 +171,8 @@ function KpiCard({
               style={{ backgroundColor: kpi.accent, opacity: live ? 1 : 0.4 }}
             />
           </span>
-          <span className="font-(family-name:--font-zeyada) text-[18px] leading-none font-normal text-(--flow-ink)/65">
-            {summary ? kpi.note(summary) : "No data yet"}
+          <span className="font-(family-name:--font-zeyada) text-[18px] leading-none font-normal text-(--flow-ink)/90">
+            {summary ? kpi.note(summary) : "Loading…"}
           </span>
         </span>
 
