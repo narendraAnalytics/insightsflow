@@ -4,8 +4,8 @@ export default function IntegrationsPage() {
   return (
     <div className="flex flex-col gap-5 px-5 py-6 sm:px-8">
       <div>
-        <h1 className="font-heading text-[22px] font-semibold text-(--flow-ink)">Connect your apps</h1>
-        <p className="mt-1 text-[13.5px] text-(--flow-ink)/55">
+        <h1 className="text-gradient-flow font-(family-name:--font-zeyada) text-[44px] leading-none font-normal">Connect your apps</h1>
+        <p className="mt-2 font-(family-name:--font-zeyada) text-[26px] leading-snug font-normal text-(--flow-magenta)">
           Connect a data source so InsightFlow can read and analyze it.
         </p>
       </div>
