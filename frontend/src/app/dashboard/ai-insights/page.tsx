@@ -4,8 +4,8 @@ export default function AiInsightsPage() {
   return (
     <div className="flex flex-col gap-5 px-5 py-6 sm:px-8">
       <div>
-        <h1 className="font-heading text-[22px] font-semibold text-(--flow-ink)">AI Insights</h1>
-        <p className="mt-1 text-[13.5px] text-(--flow-ink)/55">
+        <h1 className="text-gradient-flow font-(family-name:--font-zeyada) text-[44px] leading-none font-normal">AI Insights</h1>
+        <p className="mt-2 font-(family-name:--font-zeyada) text-[26px] leading-snug font-normal text-(--flow-magenta)">
           Ask questions about your connected Google Sheet in plain language.
         </p>
       </div>

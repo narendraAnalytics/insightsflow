@@ -28,6 +28,14 @@ import {
 } from "@/hooks/use-insights-chat";
 import { TableCard, ValueCard } from "@/components/dashboard/insights/result-card";
 
+// Deep, bright accents (no blue/violet) — used to tell suggestion chips apart.
+const chipAccents = [
+  "var(--flow-magenta)",
+  "oklch(0.66 0.12 190)",
+  "oklch(0.72 0.17 55)",
+  "oklch(0.66 0.21 10)",
+];
+
 const spring = { type: "spring", stiffness: 260, damping: 22 } as const;
 
 const raised = (accent: string) =>
@@ -53,7 +61,7 @@ function Highlight({ text }: { text: string }) {
     <>
       {parts.map((part, i) =>
         i % 2 === 1 ? (
-          <span key={i} className="font-heading font-bold tabular-nums text-(--flow-magenta)">
+          <span key={i} className="text-[1.15em] tabular-nums text-(--flow-magenta)">
             {formatNumber(part)}
           </span>
         ) : (
@@ -78,10 +86,10 @@ function InWords({ headline }: { headline: Headline }) {
         <TextAa weight="bold" className="size-4 text-(--flow-magenta)" />
       </span>
       <div className="min-w-0">
-        <p className="text-[12px] font-medium text-(--flow-ink)/50">
+        <p className="font-(family-name:--font-zeyada) text-[21px] leading-none font-normal text-(--flow-magenta)">
           In words{headline.label ? ` · ${headline.label}` : ""}
         </p>
-        <p className="font-heading text-[16px] leading-snug font-semibold text-(--flow-ink)">{headline.words}</p>
+        <p className="mt-1 font-(family-name:--font-zeyada) text-[28px] leading-none font-normal text-(--flow-ink)">{headline.words}</p>
       </div>
     </motion.div>
   );
@@ -104,7 +112,7 @@ function StepChip({ step }: { step: Step }) {
       initial={{ opacity: 0, scale: 0.85, y: 6 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       transition={spring}
-      className="inline-flex items-center gap-2 rounded-full border border-(--flow-cream) bg-(--flow-cream)/80 px-3 py-1.5 text-[12.5px] font-medium text-(--flow-ink)/75"
+      className="inline-flex items-center gap-2 rounded-full border border-(--flow-cream) bg-(--flow-cream)/80 px-3 py-1.5 font-(family-name:--font-zeyada) text-[20px] leading-none font-normal text-(--flow-ink)/85"
       style={{ boxShadow: raised(step.status === "failed" ? "var(--flow-coral)" : "var(--flow-cyan)") }}
     >
       {step.status === "running" ? (
@@ -167,12 +175,12 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
         )}
 
         {waiting && message.status !== "error" && (
-          <p className="shimmer-text font-heading text-[15px] font-semibold">{waitingLabel}</p>
+          <p className="shimmer-text font-(family-name:--font-zeyada) text-[26px] leading-none font-normal">{waitingLabel}</p>
         )}
 
         {message.content && (
           <div
-            className="max-w-[46rem] rounded-3xl rounded-tl-md border border-(--flow-cream) bg-(--flow-cream)/70 px-5 py-4 text-[15px] leading-relaxed whitespace-pre-wrap text-(--flow-ink) backdrop-blur-md"
+            className="max-w-[46rem] rounded-3xl rounded-tl-md border border-(--flow-cream) bg-(--flow-cream)/70 px-5 py-4 font-(family-name:--font-zeyada) text-[24px] leading-snug font-normal whitespace-pre-wrap text-(--flow-ink)"
             style={{ boxShadow: raised("var(--flow-magenta)") }}
           >
             <Highlight text={message.content} />
@@ -185,7 +193,7 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
         {headline && message.content && <InWords headline={headline} />}
 
         {message.status === "error" && (
-          <p className="flex items-center gap-2 rounded-2xl bg-(--flow-coral)/12 px-4 py-2.5 text-[13.5px] font-medium text-(--flow-ink)">
+          <p className="flex items-center gap-2 rounded-2xl bg-(--flow-coral)/12 px-4 py-2.5 font-(family-name:--font-zeyada) text-[23px] leading-snug font-normal text-(--flow-ink)">
             <WarningCircle weight="fill" className="size-4 shrink-0 text-(--flow-coral)" />
             {message.error}
           </p>
@@ -204,7 +212,7 @@ function UserMessage({ message }: { message: ChatMessage }) {
       className="flex justify-end"
     >
       <p
-        className="bg-gradient-flow max-w-[85%] rounded-3xl rounded-br-md px-5 py-3 text-[15px] leading-relaxed font-medium text-(--flow-cream)"
+        className="bg-gradient-flow max-w-[85%] rounded-3xl rounded-br-md px-5 py-3 font-(family-name:--font-zeyada) text-[25px] leading-snug font-normal text-(--flow-cream)"
         style={{ boxShadow: "0 20px 30px -16px var(--flow-magenta)" }}
       >
         {message.content}
@@ -260,20 +268,20 @@ function HistoryPanel({
         type="button"
         onClick={onNew}
         disabled={busy}
-        className="bg-gradient-flow flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-[13.5px] font-semibold text-(--flow-cream) shadow-[0_14px_24px_-12px_var(--flow-magenta)] transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
+        className="bg-gradient-flow flex items-center justify-center gap-2 rounded-2xl px-4 py-2 font-(family-name:--font-zeyada) text-[25px] leading-none font-normal text-(--flow-cream) shadow-[0_14px_24px_-12px_var(--flow-magenta)] transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
       >
         <Plus weight="bold" className="size-4" />
         New chat
       </button>
 
-      <p className="px-1.5 font-heading text-[13px] font-semibold text-(--flow-ink)/60">Your chats</p>
+      <p className="px-1.5 font-(family-name:--font-zeyada) text-[24px] leading-none font-normal text-(--flow-magenta)">Your chats</p>
 
       <div
         className="-mx-1 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-1 pb-1"
         style={{ scrollbarWidth: "thin", scrollbarColor: "var(--flow-pink) transparent" }}
       >
         {conversations.length === 0 ? (
-          <p className="px-1.5 py-3 text-[12.5px] leading-snug text-(--flow-ink)/45">
+          <p className="px-1.5 py-3 font-(family-name:--font-zeyada) text-[21px] leading-snug text-(--flow-ink)/75">
             Chats you start are saved here, so you can pick them up later.
           </p>
         ) : (
@@ -299,10 +307,10 @@ function HistoryPanel({
                   disabled={busy}
                   className="flex w-full flex-col items-start gap-0.5 rounded-2xl px-3 py-2.5 pr-9 text-left disabled:opacity-60"
                 >
-                  <span className="line-clamp-2 text-[13px] leading-snug font-medium text-(--flow-ink)">
+                  <span className="line-clamp-2 font-(family-name:--font-zeyada) text-[22px] leading-tight font-normal text-(--flow-ink)">
                     {c.title}
                   </span>
-                  <span className="text-[11.5px] text-(--flow-ink)/45">{timeAgo(c.updated_at)}</span>
+                  <span className="font-(family-name:--font-zeyada) text-[19px] leading-none text-(--flow-coral)">{timeAgo(c.updated_at)}</span>
                 </button>
                 <button
                   type="button"
@@ -347,12 +355,12 @@ function SourcePicker({
       >
         <LockSimple weight="bold" className="size-3.5 shrink-0 text-(--flow-magenta)" />
         {removed || used.length === 0 ? (
-          <span className="text-[13px] font-medium text-(--flow-ink)/60">Sheets removed</span>
+          <span className="font-(family-name:--font-zeyada) text-[22px] leading-none font-normal text-(--flow-ink)/75">Sheets removed</span>
         ) : (
           used.map((s) => (
             <span
               key={s.id}
-              className="max-w-full truncate rounded-full border border-(--flow-cream) bg-(--flow-cream)/80 px-3.5 py-1.5 text-[13px] font-medium text-(--flow-ink)/75"
+              className="max-w-full truncate rounded-full border border-(--flow-cream) bg-(--flow-cream)/80 px-3.5 py-1.5 font-(family-name:--font-zeyada) text-[21px] leading-none font-normal text-(--flow-ink)/85"
               style={{ boxShadow: raised("var(--flow-peach)") }}
             >
               {sourceLabel(s)}
@@ -372,7 +380,7 @@ function SourcePicker({
 
   return (
     <div className="mb-5 flex max-w-full flex-col gap-2 self-start" role="group" aria-label="Sheets to ask about">
-      <span className="px-1 text-[12.5px] font-medium text-(--flow-ink)/50">
+      <span className="px-1 font-(family-name:--font-zeyada) text-[22px] leading-none font-normal text-(--flow-magenta)">
         {sources.length > 1 ? "Asking about (pick one or more)" : "Asking about"}
       </span>
       <div className="flex flex-wrap gap-2">
@@ -386,10 +394,10 @@ function SourcePicker({
               aria-checked={on}
               disabled={disabled || sources.length < 2 || (!on && atLimit)}
               onClick={() => toggle(s.id)}
-              className={`inline-flex max-w-full items-center gap-2 rounded-full border px-4 py-2 text-[13.5px] font-semibold transition-transform enabled:hover:-translate-y-0.5 enabled:active:scale-[0.97] disabled:cursor-default ${
+              className={`inline-flex max-w-full items-center gap-2 rounded-full border px-4 py-1.5 font-(family-name:--font-zeyada) text-[23px] leading-none font-normal transition-transform enabled:hover:-translate-y-0.5 enabled:active:scale-[0.97] disabled:cursor-default ${
                 on
                   ? "bg-gradient-flow border-transparent text-(--flow-cream)"
-                  : "border-(--flow-cream) bg-(--flow-cream)/85 text-(--flow-ink)/75 disabled:opacity-50"
+                  : "border-(--flow-cream) bg-(--flow-cream)/85 text-(--flow-ink)/85 disabled:opacity-50"
               }`}
               style={{ boxShadow: raised("var(--flow-magenta)") }}
             >
@@ -400,7 +408,7 @@ function SourcePicker({
         })}
       </div>
       {selected.length > 1 && (
-        <p className="flex items-center gap-1.5 px-1 text-[12.5px] text-(--flow-ink)/55">
+        <p className="flex items-center gap-1.5 px-1 font-(family-name:--font-zeyada) text-[21px] leading-none text-(--flow-ink)/80">
           <Link weight="bold" className="size-3.5 shrink-0 text-(--flow-magenta)" />
           Answers can combine these sheets — they&apos;re matched on shared columns like a name or ID.
         </p>
@@ -461,7 +469,7 @@ export function InsightsChat() {
   };
 
   if (loading) {
-    return <p className="px-8 py-10 text-[13.5px] text-(--flow-ink)/45">Loading…</p>;
+    return <p className="px-8 py-10 font-(family-name:--font-zeyada) text-[26px] leading-none text-(--flow-ink)/70">Loading…</p>;
   }
 
   if (!ready) {
@@ -474,16 +482,16 @@ export function InsightsChat() {
           <Table weight="duotone" className="size-8 text-(--flow-magenta)" />
         </span>
         <div>
-          <p className="font-heading text-[20px] font-bold tracking-tight text-(--flow-ink)">
+          <p className="text-gradient-flow font-(family-name:--font-zeyada) text-[36px] leading-none font-normal">
             Connect a sheet to start
           </p>
-          <p className="mt-1 text-[13.5px] text-(--flow-ink)/55">
+          <p className="mt-2 font-(family-name:--font-zeyada) text-[23px] leading-snug font-normal text-(--flow-ink)/80">
             Pick a Google Sheet on the Integrations page, then ask questions about it here.
           </p>
         </div>
         <a
           href="/dashboard/integrations"
-          className="bg-gradient-flow rounded-full px-5 py-2.5 text-[14px] font-semibold text-(--flow-cream) shadow-[0_18px_30px_-14px_var(--flow-magenta)] transition-transform hover:scale-[1.04] active:scale-[0.97]"
+          className="bg-gradient-flow rounded-full px-6 py-2 font-(family-name:--font-zeyada) text-[25px] leading-none font-normal text-(--flow-cream) shadow-[0_18px_30px_-14px_var(--flow-magenta)] transition-transform hover:scale-[1.04] active:scale-[0.97]"
         >
           Go to Integrations
         </a>
@@ -520,7 +528,7 @@ export function InsightsChat() {
           type="button"
           onClick={() => setHistoryOpen((v) => !v)}
           aria-expanded={historyOpen}
-          className="inline-flex items-center gap-2 rounded-full border border-(--flow-cream) bg-(--flow-cream)/80 px-4 py-2 text-[13px] font-semibold text-(--flow-ink)/75"
+          className="inline-flex items-center gap-2 rounded-full border border-(--flow-cream) bg-(--flow-cream)/80 px-4 py-1.5 font-(family-name:--font-zeyada) text-[23px] leading-none font-normal text-(--flow-ink)/85"
           style={{ boxShadow: raised("var(--flow-magenta)") }}
         >
           <ChatsCircle weight="duotone" className="size-4 text-(--flow-magenta)" />
@@ -542,7 +550,7 @@ export function InsightsChat() {
       {sourceRemoved && (
         <p
           role="status"
-          className="mb-5 flex items-start gap-2 rounded-2xl bg-(--flow-coral)/12 px-4 py-3 text-[13.5px] font-medium text-(--flow-ink)"
+          className="mb-5 flex items-start gap-2 rounded-2xl bg-(--flow-coral)/12 px-4 py-3 font-(family-name:--font-zeyada) text-[23px] leading-snug font-normal text-(--flow-ink)"
         >
           <WarningCircle weight="fill" className="mt-0.5 size-4 shrink-0 text-(--flow-coral)" />
           This chat&apos;s sheet was removed, so you can read it but not ask new questions. Start a new chat to ask about
@@ -551,7 +559,7 @@ export function InsightsChat() {
       )}
       <div className="flex flex-1 flex-col gap-6 pb-6">
         {opening ? (
-          <p className="shimmer-text pt-16 text-center font-heading text-[15px] font-semibold">Opening chat…</p>
+          <p className="shimmer-text pt-16 text-center font-(family-name:--font-zeyada) text-[28px] leading-none font-normal">Opening chat…</p>
         ) : messages.length === 0 ? (
           <motion.div
             initial={{ opacity: 0, y: 16 }}
@@ -566,10 +574,10 @@ export function InsightsChat() {
               <Sparkle weight="duotone" className="size-8 text-(--flow-magenta)" />
             </span>
             <div>
-              <h2 className="font-heading text-[30px] leading-tight font-bold tracking-tight text-(--flow-ink)">
+              <h2 className="text-gradient-flow font-(family-name:--font-zeyada) text-[52px] leading-none font-normal">
                 Ask anything about {sheetName}
               </h2>
-              <p className="mx-auto mt-2 max-w-md text-[14.5px] text-(--flow-ink)/55">
+              <p className="mx-auto mt-3 max-w-md font-(family-name:--font-zeyada) text-[26px] leading-snug font-normal text-(--flow-ink)/80">
                 Every number comes from your real rows — the assistant explains, it never guesses.
               </p>
             </div>
@@ -583,10 +591,14 @@ export function InsightsChat() {
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.15 + i * 0.07, ...spring }}
-                    whileHover={{ y: -3, rotateX: 6 }}
+                    whileHover={{ y: -3 }}
                     whileTap={{ scale: 0.97 }}
-                    style={{ boxShadow: raised("var(--flow-magenta)"), transformPerspective: 600 }}
-                    className="rounded-2xl border border-(--flow-cream) bg-(--flow-cream)/80 px-4 py-2.5 text-[13.5px] font-medium text-(--flow-ink)/80"
+                    style={{
+                      boxShadow: raised(chipAccents[i % chipAccents.length]),
+                      backgroundColor: `color-mix(in oklab, ${chipAccents[i % chipAccents.length]} 12%, var(--flow-cream))`,
+                      color: chipAccents[i % chipAccents.length],
+                    }}
+                    className="rounded-2xl border border-(--flow-cream) px-4 py-2 font-(family-name:--font-zeyada) text-[23px] leading-none font-normal"
                   >
                     {q}
                   </motion.button>
@@ -626,7 +638,7 @@ export function InsightsChat() {
             disabled={sourceRemoved}
             placeholder={sourceRemoved ? "This chat's sheet was removed" : "Which region has the highest revenue?"}
             aria-label="Ask a question about your sheet"
-            className="max-h-33 min-h-10 flex-1 resize-none bg-transparent py-2.5 text-[15px] text-(--flow-ink) outline-none placeholder:text-(--flow-ink)/35"
+            className="max-h-33 min-h-10 flex-1 resize-none bg-transparent py-2 font-(family-name:--font-zeyada) text-[25px] leading-snug font-normal text-(--flow-ink) outline-none placeholder:text-(--flow-ink)/55"
           />
           {busy ? (
             <button

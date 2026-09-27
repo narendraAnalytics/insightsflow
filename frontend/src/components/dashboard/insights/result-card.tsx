@@ -7,9 +7,10 @@ import type { ResultTable } from "@/hooks/use-insights-chat";
 const barAccents = [
   "var(--flow-magenta)",
   "var(--flow-coral)",
-  "var(--flow-cyan)",
-  "var(--flow-lavender)",
-  "var(--flow-pink)",
+  "oklch(0.66 0.12 190)",
+  "oklch(0.72 0.17 55)",
+  "oklch(0.68 0.15 160)",
+  "oklch(0.64 0.22 330)",
 ];
 
 const fmt = (n: number) => n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
@@ -40,20 +41,20 @@ const cardShadow = "0 24px 36px -22px color-mix(in oklab, var(--flow-magenta) 50
 export function ValueCard({ value, label }: { value: number; label: string }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12, rotateX: 14 }}
-      animate={{ opacity: 1, y: 0, rotateX: 0 }}
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
       transition={{ type: "spring", stiffness: 200, damping: 20 }}
-      style={{ boxShadow: cardShadow, transformPerspective: 800 }}
+      style={{ boxShadow: cardShadow }}
       className="relative w-fit min-w-44 overflow-hidden rounded-2xl border border-(--flow-cream) bg-(--flow-cream)/75 px-5 py-4"
     >
       <span
         aria-hidden="true"
         className="absolute -top-8 -right-8 size-24 rounded-full bg-(--flow-magenta)/25 blur-2xl"
       />
-      <p className="text-gradient-flow relative font-heading text-[38px] leading-none font-bold tracking-tight tabular-nums">
+      <p className="text-gradient-flow relative font-(family-name:--font-zeyada) text-[56px] leading-none font-normal tabular-nums">
         <CountUp value={value} />
       </p>
-      <p className="relative mt-1.5 text-[12.5px] font-medium text-(--flow-ink)/55">{label}</p>
+      <p className="relative mt-1.5 font-(family-name:--font-zeyada) text-[22px] leading-none font-normal text-(--flow-ink)/80">{label}</p>
     </motion.div>
   );
 }
@@ -65,10 +66,10 @@ export function TableCard({ table }: { table: ResultTable }) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12, rotateX: 14 }}
-      animate={{ opacity: 1, y: 0, rotateX: 0 }}
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
       transition={{ type: "spring", stiffness: 200, damping: 20 }}
-      style={{ boxShadow: cardShadow, transformPerspective: 800 }}
+      style={{ boxShadow: cardShadow }}
       className="w-full max-w-xl overflow-hidden rounded-2xl border border-(--flow-cream) bg-(--flow-cream)/75"
     >
       {isBars ? <Bars table={table} /> : <Grid table={table} />}
@@ -80,15 +81,15 @@ function Bars({ table }: { table: ResultTable }) {
   const max = Math.max(...table.rows.map((r) => Math.abs(r[1] as number)), 1);
   return (
     <div className="flex flex-col gap-3 p-4">
-      <p className="font-heading text-[13px] font-semibold text-(--flow-ink)/70">{table.columns[1]}</p>
+      <p className="font-(family-name:--font-zeyada) text-[24px] leading-none font-normal text-(--flow-magenta)">{table.columns[1]}</p>
       {table.rows.map((row, i) => {
         const value = row[1] as number;
         const accent = barAccents[i % barAccents.length];
         return (
           <div key={`${row[0]}-${i}`} className="flex flex-col gap-1.5">
-            <div className="flex items-baseline justify-between gap-3 text-[13px]">
-              <span className="truncate font-medium text-(--flow-ink)">{String(row[0])}</span>
-              <span className="font-heading font-bold tabular-nums text-(--flow-ink)">{fmt(value)}</span>
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="truncate font-(family-name:--font-zeyada) text-[23px] leading-none font-normal text-(--flow-ink)">{String(row[0])}</span>
+              <span className="font-(family-name:--font-zeyada) text-[26px] leading-none font-normal tabular-nums" style={{ color: accent }}>{fmt(value)}</span>
             </div>
             <div className="h-2.5 overflow-hidden rounded-full bg-(--flow-ink)/6">
               <motion.div
@@ -116,7 +117,7 @@ function Grid({ table }: { table: ResultTable }) {
         <thead className="sticky top-0 bg-(--flow-cream)">
           <tr>
             {table.columns.map((c) => (
-              <th key={c} className="px-3.5 py-2.5 font-heading font-semibold whitespace-nowrap text-(--flow-ink)">
+              <th key={c} className="px-3.5 py-2 font-(family-name:--font-zeyada) text-[22px] leading-none font-normal whitespace-nowrap text-(--flow-magenta)">
                 {c}
               </th>
             ))}
