@@ -1,162 +1,177 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
-import { Quotes, Star } from "@phosphor-icons/react";
-import { sectionContainer, sectionItem, sectionViewport, useParallaxY } from "@/lib/motion";
+import { useReducedMotion } from "framer-motion";
+import { Quotes, Sparkle } from "@phosphor-icons/react";
+import { GoogleSheetsGlyph } from "@/components/site/brand-icons";
+import { useCursorGlow } from "@/lib/motion";
+import { RevealHeading } from "@/components/site/primitives";
 
-const testimonials = [
+/*
+ * Example questions by role. These are illustrations of what the product is for,
+ * not customer testimonials — no names, companies or ratings.
+ */
+/*
+ * Each card has its own color identity. "solid" cards carry a full sunrise
+ * gradient; "tint" cards a soft wash of their accent. `ink` picks the text color
+ * that keeps contrast on that background (cream on magenta/coral, ink on amber).
+ */
+type Tone = { kind: "solid" | "tint"; accent: string; bg: string; ink: "cream" | "ink" };
+
+const examples: { role: string; question: string; answer: string; sheets: string[]; tone: Tone }[] = [
   {
-    name: "Sarah Chen",
-    role: "Product Manager",
-    quote: "InsightFlow helps us see the bigger picture across all our tools. It's like having an AI teammate.",
-    initials: "SC",
-    accent: "var(--flow-magenta)",
-    gradient: "linear-gradient(135deg, var(--flow-magenta), var(--flow-pink))",
+    role: "Finance lead",
+    question: "What was revenue by region last quarter, in crore?",
+    answer: "South led with ₹3.12 crore, 38% of the total.",
+    sheets: ["Sales 2026"],
+    tone: { kind: "solid", accent: "var(--flow-magenta)", bg: "linear-gradient(145deg, var(--flow-magenta) 0%, var(--flow-coral) 100%)", ink: "cream" },
   },
   {
-    name: "Alex Rivera",
     role: "Founder",
-    quote: "We save hours every week. The insights are surprisingly accurate and actually useful.",
-    initials: "AR",
-    accent: "var(--flow-coral)",
-    gradient: "linear-gradient(135deg, var(--flow-coral), var(--flow-magenta))",
+    question: "Which month had the highest burn, and what drove it?",
+    answer: "August, at ₹42.6 lakh. Hiring was 61% of it.",
+    sheets: ["Expenses"],
+    tone: { kind: "tint", accent: "var(--flow-coral)", bg: "linear-gradient(150deg, var(--flow-coral-100) 0%, var(--flow-peach) 100%)", ink: "ink" },
   },
   {
-    name: "Priya Sharma",
-    role: "Engineering Lead",
-    quote: "Finally, all our tools make sense together. InsightFlow is a genuine game changer.",
-    initials: "PS",
-    accent: "var(--flow-cyan)",
-    gradient: "linear-gradient(135deg, var(--flow-cyan), var(--flow-lavender))",
+    role: "Sales manager",
+    question: "Who is furthest behind their target this month?",
+    answer: "The West team, 34% short with 9 days left.",
+    sheets: ["Deals", "Targets"],
+    tone: { kind: "solid", accent: "var(--flow-amber)", bg: "linear-gradient(145deg, var(--flow-amber) 0%, var(--flow-coral) 100%)", ink: "ink" },
   },
   {
-    name: "Diego Fernandez",
-    role: "Ops Lead",
-    quote: "Reports that used to take a full day now land in Notion before our standup even starts.",
-    initials: "DF",
-    accent: "var(--flow-lavender)",
-    gradient: "linear-gradient(135deg, var(--flow-lavender), var(--flow-cyan))",
+    role: "Ops lead",
+    question: "Which SKUs have fewer than 10 days of stock left?",
+    answer: "7 SKUs. Cold Brew 1L runs out in 4 days.",
+    sheets: ["Inventory"],
+    tone: { kind: "tint", accent: "var(--flow-mint)", bg: "linear-gradient(150deg, color-mix(in oklab, var(--flow-mint) 45%, var(--flow-shell)) 0%, var(--flow-shell) 100%)", ink: "ink" },
   },
   {
-    name: "Maya Thompson",
-    role: "Growth Marketer",
-    quote: "The Slack alerts catch trend shifts we'd have otherwise found out about a week late.",
-    initials: "MT",
-    accent: "var(--flow-pink)",
-    gradient: "linear-gradient(135deg, var(--flow-pink), var(--flow-coral))",
+    role: "D2C marketer",
+    question: "Which campaign brought the cheapest orders in Diwali week?",
+    answer: "Instagram Reels, at ₹182 per order.",
+    sheets: ["Ads", "Orders"],
+    tone: { kind: "solid", accent: "var(--flow-magenta)", bg: "linear-gradient(145deg, var(--flow-magenta-700) 0%, var(--flow-magenta) 100%)", ink: "cream" },
   },
   {
-    name: "Ravi Menon",
-    role: "Data Analyst",
-    quote: "Deterministic numbers, human approval, then action. It's the agent workflow I actually trust.",
-    initials: "RM",
-    accent: "var(--flow-magenta)",
-    gradient: "linear-gradient(135deg, var(--flow-magenta), var(--flow-cyan))",
+    role: "Analyst",
+    question: "Compare returns to orders by city and flag anything above 8%.",
+    answer: "Pune (9.4%) and Jaipur (8.7%) are above 8%.",
+    sheets: ["Orders", "Returns"],
+    tone: { kind: "tint", accent: "var(--flow-amber)", bg: "linear-gradient(150deg, color-mix(in oklab, var(--flow-amber) 40%, var(--flow-shell)) 0%, var(--flow-peach) 100%)", ink: "ink" },
   },
 ];
 
-const rowOne = testimonials.slice(0, 3);
-const rowTwo = testimonials.slice(3, 6);
+const rowOne = examples.slice(0, 3);
+const rowTwo = examples.slice(3);
 
-function useReducedMotion() {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    const mql = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setReduced(mql.matches);
-    update();
-    mql.addEventListener("change", update);
-    return () => mql.removeEventListener("change", update);
-  }, []);
-  return reduced;
-}
-
-function TestimonialCard({
-  testimonial,
-  reducedMotion,
-}: {
-  testimonial: (typeof testimonials)[number];
-  reducedMotion: boolean;
-}) {
-  const cardRef = useRef<HTMLDivElement>(null);
-
-  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (reducedMotion || !cardRef.current) return;
-    const rect = cardRef.current.getBoundingClientRect();
-    const mx = ((event.clientX - rect.left) / rect.width) * 100;
-    const my = ((event.clientY - rect.top) / rect.height) * 100;
-    cardRef.current.style.setProperty("--mx", `${mx}%`);
-    cardRef.current.style.setProperty("--my", `${my}%`);
-  };
+function ExampleCard({ example }: { example: (typeof examples)[number] }) {
+  const reduced = useReducedMotion() ?? false;
+  const glow = useCursorGlow<HTMLElement>(reduced);
+  const { tone } = example;
+  const solid = tone.kind === "solid";
+  const text = tone.ink === "cream" ? "var(--flow-shell)" : "var(--flow-ink)";
 
   return (
-    <div
-      ref={cardRef}
-      onPointerMove={handlePointerMove}
-      className="glass-card group relative flex w-[300px] shrink-0 flex-col items-start overflow-hidden rounded-3xl p-6 text-left transition-transform duration-300 hover:-translate-y-1.5 sm:w-[340px]"
+    <figure
+      ref={glow.ref}
+      onPointerMove={glow.onPointerMove}
+      className="group relative isolate flex min-h-[250px] w-[300px] shrink-0 flex-col overflow-hidden rounded-[28px] p-6 text-left transition-transform duration-300 hover:-translate-y-1.5 hover:rotate-[-0.6deg] sm:w-[380px] sm:p-7"
       style={{
-        boxShadow: `0 18px 40px -24px color-mix(in oklab, ${testimonial.accent} 55%, transparent)`,
+        background: tone.bg,
+        color: text,
+        boxShadow: solid
+          ? `0 22px 44px -22px color-mix(in oklab, ${tone.accent} 85%, transparent), inset 0 1px 0 color-mix(in oklab, var(--flow-shell) 45%, transparent)`
+          : `0 18px 40px -24px color-mix(in oklab, ${tone.accent} 70%, transparent), inset 0 0 0 1px color-mix(in oklab, ${tone.accent} 40%, transparent)`,
       }}
     >
-      <span
-        aria-hidden="true"
-        className="absolute inset-x-0 top-0 h-1"
-        style={{ backgroundImage: testimonial.gradient }}
-      />
+      {/* cursor glow */}
       <span
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 -z-10 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
         style={{
-          background: `radial-gradient(220px circle at var(--mx, 50%) var(--my, 50%), color-mix(in oklab, ${testimonial.accent} 22%, transparent), transparent 70%)`,
+          background: `radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), color-mix(in oklab, var(--flow-shell) ${solid ? 30 : 70}%, transparent), transparent 70%)`,
         }}
       />
+      {/* soft corner bloom */}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-16 -bottom-16 -z-10 size-48 rounded-full blur-2xl"
+        style={{ background: solid ? "color-mix(in oklab, var(--flow-amber) 55%, transparent)" : `color-mix(in oklab, ${tone.accent} 45%, transparent)` }}
+      />
+      {/* big quote mark watermark */}
+      <Quotes
+        aria-hidden="true"
+        weight="fill"
+        className="pointer-events-none absolute -top-3 right-4 -z-10 size-28 transition-transform duration-500 group-hover:-translate-y-1 group-hover:rotate-6"
+        style={{ color: solid ? "color-mix(in oklab, var(--flow-shell) 22%, transparent)" : `color-mix(in oklab, ${tone.accent} 35%, transparent)` }}
+      />
 
-      <Quotes weight="fill" className="size-6" style={{ color: `color-mix(in oklab, ${testimonial.accent} 55%, transparent)` }} />
-      <p className="mt-3 text-[14.5px] leading-relaxed text-(--flow-ink)/80">
-        &ldquo;{testimonial.quote}&rdquo;
-      </p>
-      <div className="mt-5 flex items-center gap-3">
+      <figcaption>
         <span
-          className="flex size-10 shrink-0 items-center justify-center rounded-full text-[12px] font-bold text-(--flow-cream)"
-          style={{ backgroundImage: testimonial.gradient }}
+          className="inline-flex items-center gap-2 rounded-full py-1 pr-3 pl-1 text-[13px] font-bold"
+          style={
+            solid
+              ? { background: "color-mix(in oklab, var(--flow-shell) 22%, transparent)", color: text }
+              : { background: tone.accent, color: "var(--flow-ink)" }
+          }
         >
-          {testimonial.initials}
+          <span
+            className="flex size-6 items-center justify-center rounded-full"
+            style={{ background: solid ? "var(--flow-shell)" : "color-mix(in oklab, var(--flow-shell) 70%, transparent)" }}
+          >
+            <Quotes weight="fill" className="size-3" style={{ color: solid ? tone.accent : "var(--flow-ink)" }} />
+          </span>
+          {example.role}
         </span>
-        <div>
-          <p className="text-[13.5px] font-semibold text-(--flow-ink)">{testimonial.name}</p>
-          <p className="text-[12px] text-(--flow-ink)/55">{testimonial.role}</p>
-        </div>
-      </div>
-      <div className="mt-3 flex items-center gap-0.5">
-        {Array.from({ length: 5 }).map((_, star) => (
-          <Star key={star} weight="fill" className="size-3.5" style={{ color: testimonial.accent }} />
+      </figcaption>
+
+      <blockquote className="font-display mt-6 flex-1 text-[26px] leading-[1.08] sm:text-[29px]" style={{ color: text }}>
+        {example.question}
+      </blockquote>
+
+      {/* the outcome: what InsightFlow answers (illustrative) */}
+      <p
+        className="mt-5 flex items-start gap-2 rounded-2xl px-3.5 py-2.5 text-[14px] leading-snug font-semibold"
+        style={{
+          background: solid ? "color-mix(in oklab, var(--flow-shell) 92%, transparent)" : "color-mix(in oklab, var(--flow-shell) 80%, transparent)",
+          color: "var(--flow-ink)",
+        }}
+      >
+        <Sparkle weight="fill" className="mt-0.5 size-4 shrink-0" style={{ color: tone.accent === "var(--flow-amber)" ? "var(--flow-coral-700)" : tone.accent }} />
+        {example.answer}
+      </p>
+
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        {example.sheets.map((s) => (
+          <span
+            key={s}
+            className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12.5px] font-semibold"
+            style={{
+              background: solid ? "color-mix(in oklab, var(--flow-shell) 88%, transparent)" : "color-mix(in oklab, var(--flow-shell) 75%, transparent)",
+              color: "var(--flow-ink)",
+            }}
+          >
+            <GoogleSheetsGlyph className="size-3.5" />
+            {s}
+          </span>
         ))}
       </div>
-    </div>
+    </figure>
   );
 }
 
-function MarqueeRow({
-  row,
-  reverse,
-  reducedMotion,
-}: {
-  row: typeof testimonials;
-  reverse: boolean;
-  reducedMotion: boolean;
-}) {
+function MarqueeRow({ row, reverse }: { row: typeof examples; reverse?: boolean }) {
   return (
-    <div className="group relative overflow-hidden mask-[linear-gradient(to_right,transparent,black_8%,black_92%,transparent)]">
+    <div className="group overflow-hidden py-3 mask-[linear-gradient(to_right,transparent,black_8%,black_92%,transparent)]">
       <div
         className="animate-marquee flex w-max gap-5 group-hover:paused"
-        style={reverse ? { animationDirection: "reverse" } : undefined}
+        style={{ animationDuration: "46s", ...(reverse ? { animationDirection: "reverse" } : {}) }}
       >
-        {[...row, ...row].map((testimonial, i) => (
-          <TestimonialCard
-            key={`${testimonial.name}-${i}`}
-            testimonial={testimonial}
-            reducedMotion={reducedMotion}
-          />
+        {[...row, ...row, ...row, ...row].map((example, i) => (
+          <div key={`${example.role}-${i}`} aria-hidden={i >= row.length}>
+            <ExampleCard example={example} />
+          </div>
         ))}
       </div>
     </div>
@@ -164,59 +179,24 @@ function MarqueeRow({
 }
 
 export function TestimonialsSection() {
-  const { ref, y } = useParallaxY([-25, 25]);
-  const reducedMotion = useReducedMotion();
-
   return (
-    <section ref={ref} className="relative isolate overflow-hidden py-20 sm:py-28">
-      <motion.div
-        aria-hidden="true"
-        style={{
-          y,
-          background:
-            "radial-gradient(45% 40% at 10% 15%, color-mix(in oklab, var(--flow-peach) 42%, transparent) 0%, transparent 65%), radial-gradient(40% 40% at 90% 10%, color-mix(in oklab, var(--flow-magenta) 26%, transparent) 0%, transparent 65%), radial-gradient(45% 45% at 85% 90%, color-mix(in oklab, var(--flow-coral) 28%, transparent) 0%, transparent 65%), radial-gradient(35% 35% at 15% 90%, color-mix(in oklab, var(--flow-cyan) 26%, transparent) 0%, transparent 65%)",
-        }}
-        className="absolute inset-0 -z-10"
-      />
-      <div
-        aria-hidden="true"
-        className="animate-float-slow absolute top-10 right-[8%] -z-10 size-56 rounded-full opacity-50 blur-3xl"
-        style={{ background: "radial-gradient(circle, var(--flow-lavender), transparent 70%)" }}
-      />
-      <div
-        aria-hidden="true"
-        className="animate-float-slower absolute bottom-0 left-[6%] -z-10 size-64 rounded-full opacity-50 blur-3xl"
-        style={{ background: "radial-gradient(circle, var(--flow-pink), transparent 70%)" }}
-      />
-
-      <motion.div
-        variants={sectionContainer}
-        initial="hidden"
-        whileInView="show"
-        viewport={sectionViewport}
-        className="mx-auto max-w-6xl px-4 text-center sm:px-6 lg:px-8"
-      >
-        <motion.span
-          variants={sectionItem}
-          className="glass-panel inline-flex items-center rounded-full px-3.5 py-1.5 text-[12px] font-semibold tracking-wide text-(--flow-magenta) uppercase"
-        >
-          Loved by users
-        </motion.span>
-        <motion.h2
-          variants={sectionItem}
-          className="mt-4 text-3xl font-semibold tracking-tight text-(--flow-ink) sm:text-4xl"
-        >
-          Teams are moving faster
-        </motion.h2>
-        <motion.p variants={sectionItem} className="mx-auto mt-3 max-w-md text-[15px] text-(--flow-ink)/65">
-          See what builders, teams and creators say about InsightFlow.
-        </motion.p>
-
-        <motion.div variants={sectionItem} className="mt-12 flex flex-col gap-5">
-          <MarqueeRow row={rowOne} reverse={false} reducedMotion={reducedMotion} />
-          <MarqueeRow row={rowTwo} reverse={true} reducedMotion={reducedMotion} />
-        </motion.div>
-      </motion.div>
+    <section id="use-cases" className="relative isolate overflow-hidden py-[clamp(5rem,10vw,9rem)]">
+      <div aria-hidden="true" className="animate-aurora-a absolute top-0 left-1/4 -z-10 size-[34rem] rounded-full bg-(--flow-amber)/25 blur-[120px]" />
+      <div className="mx-auto max-w-[1240px] px-4 sm:px-6 lg:px-8">
+        <div className="grid items-end gap-6 lg:grid-cols-[1.3fr_1fr]">
+          <RevealHeading
+            className="font-display text-[clamp(2.4rem,5vw,4.4rem)] leading-[0.98] text-(--flow-ink)"
+            lines={[{ text: "Built for the questions" }, { text: "you ask every week.", className: "text-sunrise" }]}
+          />
+          <p className="max-w-[40ch] text-[17px] leading-relaxed text-(--text-secondary) lg:pb-2">
+            Find your team below. Type the question the way you would say it; answers shown are illustrative.
+          </p>
+        </div>
+      </div>
+      <div className="mt-12 flex flex-col gap-2">
+        <MarqueeRow row={rowOne} />
+        <MarqueeRow row={rowTwo} reverse />
+      </div>
     </section>
   );
 }

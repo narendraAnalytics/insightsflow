@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Bricolage_Grotesque, Geist, Geist_Mono, JetBrains_Mono, Plus_Jakarta_Sans, Zeyada } from "next/font/google";
+import { Bricolage_Grotesque, Fraunces, Geist, Geist_Mono, JetBrains_Mono, Plus_Jakarta_Sans, Zeyada } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 import { cn } from "@/lib/utils";
@@ -16,9 +16,19 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Variable width axis powers the landing page's condensed `.font-display` headlines.
 const bricolageGrotesque = Bricolage_Grotesque({
   variable: "--font-bricolage",
   subsets: ["latin"],
+  axes: ["opsz", "wdth"],
+});
+
+// Landing-only editorial accent (italic, soft/wonky variable axes) — see `.font-editorial`.
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  axes: ["SOFT", "WONK", "opsz"],
 });
 
 // Dashboard-only UI font (see `body:has(.dashboard-root)` in globals.css).
@@ -35,9 +45,9 @@ const zeyada = Zeyada({
 });
 
 export const metadata: Metadata = {
-  title: "InsightFlow — Turn scattered information into real progress",
+  title: "InsightFlow — Ask your sheets. Approve the answer. Alert the team.",
   description:
-    "InsightFlow connects Slack, GitHub, Google Drive, Notion and more, then uses AI to analyze, correlate, and surface actionable insights across every tool your team runs on.",
+    "InsightFlow is an AI analyst for your Google Sheets. Every number is computed by code, amounts read in lakh and crore, and nothing reaches your team until you approve it.",
   applicationName: "InsightFlow",
   appleWebApp: {
     capable: true,
@@ -62,6 +72,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         geistSans.variable,
         geistMono.variable,
         bricolageGrotesque.variable,
+        fraunces.variable,
         plusJakarta.variable,
         zeyada.variable,
         "font-sans",

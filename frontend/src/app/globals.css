@@ -56,6 +56,10 @@
   --color-flow-coral: var(--flow-coral);
   --color-flow-magenta: var(--flow-magenta);
   --color-flow-ink: var(--flow-ink);
+  --color-flow-amber: var(--flow-amber);
+  --color-flow-mint: var(--flow-mint);
+  --color-flow-magenta-700: var(--flow-magenta-700);
+  --color-flow-shell: var(--flow-shell);
 
   --animate-float-slow: float-slow 7s ease-in-out infinite;
   --animate-float-slower: float-slow 9s ease-in-out infinite;
@@ -109,6 +113,37 @@
   --flow-coral: oklch(0.7 0.17 30);
   --flow-magenta: oklch(0.62 0.21 340);
   --flow-ink: oklch(0.32 0.09 27);
+
+  /* Landing redesign (2026-09-29) — added tokens only; the originals above are
+     shared with the dashboard and keep their values. */
+  --flow-amber: oklch(0.84 0.15 72);
+  --flow-mint: oklch(0.86 0.11 168);
+  --flow-magenta-100: oklch(0.94 0.04 345);
+  --flow-magenta-300: oklch(0.8 0.13 345);
+  --flow-magenta-700: oklch(0.5 0.19 345); /* AA-safe accent for small text on cream */
+  --flow-coral-100: oklch(0.94 0.04 35);
+  --flow-coral-300: oklch(0.82 0.11 35);
+  --flow-coral-700: oklch(0.55 0.16 32);
+  --flow-shell: oklch(0.985 0.012 70); /* raised surface, a touch lighter than cream */
+
+  --surface: var(--flow-cream);
+  --surface-raised: var(--flow-shell);
+  --border-subtle: color-mix(in oklab, var(--flow-ink) 9%, transparent);
+  --border-strong: color-mix(in oklab, var(--flow-ink) 18%, transparent);
+  --text-primary: var(--flow-ink);
+  --text-secondary: color-mix(in oklab, var(--flow-ink) 74%, transparent);
+  --text-muted: color-mix(in oklab, var(--flow-ink) 58%, transparent);
+  --accent-glow: color-mix(in oklab, var(--flow-magenta) 45%, transparent);
+
+  --shadow-sm: 0 1px 2px color-mix(in oklab, var(--flow-coral-700) 12%, transparent),
+    0 4px 12px -6px color-mix(in oklab, var(--flow-magenta) 18%, transparent);
+  --shadow-md: 0 2px 4px color-mix(in oklab, var(--flow-coral-700) 8%, transparent),
+    0 18px 40px -18px color-mix(in oklab, var(--flow-magenta) 30%, transparent);
+  --shadow-lg: 0 4px 10px color-mix(in oklab, var(--flow-coral-700) 8%, transparent),
+    0 40px 80px -32px color-mix(in oklab, var(--flow-magenta) 38%, transparent);
+
+  --ease-out-expo: cubic-bezier(0.22, 1, 0.36, 1);
+  --sunrise: linear-gradient(110deg, var(--flow-magenta) 0%, var(--flow-coral) 55%, var(--flow-amber) 100%);
 }
 
 .dark {
@@ -300,6 +335,222 @@
     transform: translateX(520%) skewX(-12deg);
     opacity: 0;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Landing redesign (2026-09-29). Landing-only classes, scoped under `.landing`
+   or prefixed `lux-`, so the dashboard's shared glass-* classes stay untouched.
+   --------------------------------------------------------------------------- */
+
+html:has(.landing) {
+  scroll-behavior: smooth;
+  scroll-padding-top: 6rem;
+}
+
+.landing {
+  color: var(--text-primary);
+}
+
+.landing ::selection {
+  background: color-mix(in oklab, var(--flow-magenta) 28%, transparent);
+  color: var(--flow-ink);
+}
+
+.landing :focus-visible {
+  outline: 2px solid var(--flow-magenta-700);
+  outline-offset: 3px;
+  border-radius: 999px;
+}
+
+/* Condensed, heavy Bricolage for display type (variable wdth axis 75–100). */
+.font-display {
+  font-family: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  font-stretch: 80%;
+  font-weight: 750;
+  letter-spacing: -0.035em;
+  font-optical-sizing: auto;
+}
+
+/* Editorial italic accent paired with .font-display (Fraunces, soft + wonky axes). */
+.font-editorial {
+  font-family: var(--font-fraunces), ui-serif, Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+  font-variation-settings: "SOFT" 100, "WONK" 1;
+  letter-spacing: -0.025em;
+}
+
+.text-sunrise {
+  background-image: var(--sunrise);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.bg-sunrise {
+  background-image: var(--sunrise);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Raised card: warm translucent surface, gradient hairline border (masked
+   pseudo-element), inner top highlight, tinted soft shadow. */
+.lux-card {
+  position: relative;
+  background: color-mix(in oklab, var(--flow-shell) 82%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, var(--flow-shell) 90%, transparent),
+    var(--shadow-md);
+}
+
+.lux-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    160deg,
+    color-mix(in oklab, var(--flow-shell) 95%, transparent) 0%,
+    color-mix(in oklab, var(--flow-magenta) 18%, transparent) 55%,
+    color-mix(in oklab, var(--flow-amber) 30%, transparent) 100%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Film grain. Add to a `relative` element; sits above backgrounds, below content
+   that has its own stacking (use `isolate` on the parent). */
+.lux-grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.045;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  border-radius: inherit;
+  z-index: 1;
+}
+
+.lux-dots {
+  background-image: radial-gradient(color-mix(in oklab, var(--flow-ink) 14%, transparent) 1px, transparent 1.4px);
+  background-size: 22px 22px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 20%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 20%, transparent 75%);
+}
+
+/* One-shot diagonal shine on hover (buttons). Needs `relative overflow-hidden`. */
+.lux-shine::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -60%;
+  width: 45%;
+  transform: skewX(-18deg);
+  background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--flow-shell) 70%, transparent), transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.lux-shine:hover::after {
+  animation: lux-shine 0.9s var(--ease-out-expo);
+}
+
+@keyframes lux-shine {
+  0% {
+    left: -60%;
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    left: 130%;
+    opacity: 0;
+  }
+}
+
+/* Slow, low-amplitude aurora drift for background blobs. */
+@keyframes aurora-a {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(6%, 4%, 0) scale(1.08);
+  }
+}
+
+@keyframes aurora-b {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1.05);
+  }
+  50% {
+    transform: translate3d(-5%, -6%, 0) scale(0.95);
+  }
+}
+
+/* will-change keeps each blurred blob on its own compositor layer, so the drift
+   is a cheap transform instead of re-blurring every frame. */
+.animate-aurora-a {
+  animation: aurora-a 11s ease-in-out infinite;
+  will-change: transform;
+}
+
+.animate-aurora-b {
+  animation: aurora-b 13s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes spin-slow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes spin-slow-reverse {
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+@keyframes ping-soft {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(2.1);
+    opacity: 0;
+  }
+}
+
+/* A pulse travelling along an orbit spoke toward the hub. */
+@keyframes spoke-pulse {
+  0% {
+    left: 100%;
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.9;
+  }
+  100% {
+    left: -2rem;
+    opacity: 0;
+  }
+}
+
+.animate-ping-soft {
+  animation: ping-soft 1.8s var(--ease-out-expo) infinite;
 }
 
 /* Dashboard typography: Plus Jakarta Sans for body and headings. Targets <body>

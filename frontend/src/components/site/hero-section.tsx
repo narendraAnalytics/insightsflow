@@ -1,153 +1,165 @@
 "use client";
 
-import { motion, type Variants } from "framer-motion";
-import { ArrowRight, CaretDown, Lightning, Play, Shield, Sparkle, Users } from "@phosphor-icons/react";
+import dynamic from "next/dynamic";
+import { motion, useReducedMotion, useScroll, useTransform, type Variants } from "framer-motion";
+import { ArrowDown, ArrowRight, ArrowUpRight } from "@phosphor-icons/react";
 import { Show, SignUpButton, useUser } from "@clerk/nextjs";
-import { GitHubGlyph, GoogleDriveGlyph, LinearGlyph, NotionGlyph, SlackGlyph } from "@/components/site/brand-icons";
+import { cn } from "@/lib/utils";
+import { EASE_OUT, useCursorGlow } from "@/lib/motion";
+import { AgentDemo } from "@/components/site/agent-demo";
+import { GoogleSheetsGlyph, NotionGlyph, SlackGlyph } from "@/components/site/brand-icons";
+import { Magnetic, RevealHeading, primaryButtonClass, secondaryButtonClass } from "@/components/site/primitives";
 
-const trustBadges = [
-  { icon: Lightning, label: "No credit card required" },
-  { icon: Shield, label: "Quick setup" },
-  { icon: Users, label: "Free tier available" },
+const HeroScene = dynamic(() => import("@/components/site/hero-scene"), { ssr: false });
+
+const worksWith = [
+  { icon: GoogleSheetsGlyph, label: "Google Sheets", live: true },
+  { icon: NotionGlyph, label: "Notion", live: false },
+  { icon: SlackGlyph, label: "Slack", live: false },
 ];
-
-const trustLogos = [
-  { icon: SlackGlyph, label: "Slack" },
-  { icon: GitHubGlyph, label: "GitHub" },
-  { icon: GoogleDriveGlyph, label: "Google Drive" },
-  { icon: NotionGlyph, label: "Notion" },
-  { icon: LinearGlyph, label: "Linear" },
-];
-
-const container: Variants = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.09, delayChildren: 0.15 } },
-};
 
 const item: Variants = {
-  hidden: { opacity: 0, y: 18 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] } },
+  hidden: { opacity: 0, y: 18, filter: "blur(6px)" },
+  show: (delay: number) => ({ opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.8, ease: EASE_OUT, delay } }),
 };
 
 export function HeroSection() {
+  const reduced = useReducedMotion() ?? false;
   const { user } = useUser();
   const displayName = user?.username ?? user?.firstName ?? "there";
+  const glow = useCursorGlow<HTMLElement>(reduced);
+
+  const { scrollYProgress } = useScroll({ target: glow.ref, offset: ["start start", "end start"] });
+  const visualY = useTransform(scrollYProgress, [0, 1], [0, reduced ? 0 : 90]);
+  const auroraY = useTransform(scrollYProgress, [0, 1], [0, reduced ? 0 : 160]);
+
+  const play = reduced ? {} : { initial: "hidden", animate: "show" };
 
   return (
-    <section id="top" className="relative isolate overflow-hidden pt-28 pb-20 sm:pt-32 lg:pb-28">
-      <div className="absolute inset-0 -z-20 overflow-hidden">
-        <video
-          className="h-full w-full object-cover opacity-100 brightness-[1.10]"
-          autoPlay
-          muted
-          loop
-          playsInline
-          preload="none"
-          poster=""
-          aria-hidden="true"
-        >
-          <source
-            src="https://res.cloudinary.com/dkqbzwicr/video/upload/v1789312214/herosecctionvideo_ehrosl.mp4"
-            type="video/mp4"
-          />
-        </video>
-      </div>
+    <section
+      ref={glow.ref}
+      onPointerMove={glow.onPointerMove}
+      id="top"
+      className="lux-grain relative isolate overflow-hidden pt-28 pb-16 sm:pt-36 lg:min-h-[100svh] lg:pb-24"
+    >
+      {/* aurora mesh */}
+      <motion.div aria-hidden="true" style={{ y: auroraY }} className="absolute inset-0 -z-20">
+        <div className="animate-aurora-a absolute -top-40 right-[-10%] size-[44rem] rounded-full bg-(--flow-magenta)/28 blur-[110px]" />
+        <div className="animate-aurora-b absolute top-[20%] right-[18%] size-[30rem] rounded-full bg-(--flow-amber)/40 blur-[100px]" />
+        <div className="animate-aurora-b absolute -top-24 -left-40 size-[34rem] rounded-full bg-(--flow-pink)/60 blur-[100px]" />
+        <div className="animate-aurora-a absolute bottom-[-12rem] left-[30%] size-[28rem] rounded-full bg-(--flow-mint)/35 blur-[110px]" />
+      </motion.div>
+      <div aria-hidden="true" className="lux-dots absolute inset-0 -z-10 opacity-70" />
+      {/* cursor spotlight (mouse only) */}
       <div
-        className="absolute inset-0 -z-10"
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 -z-10 hidden [@media(pointer:fine)]:block"
         style={{
           background:
-            "radial-gradient(60% 55% at 80% 15%, color-mix(in oklab, var(--flow-cyan) 55%, transparent) 0%, transparent 60%), radial-gradient(55% 50% at 12% 20%, color-mix(in oklab, var(--flow-lavender) 55%, transparent) 0%, transparent 60%), linear-gradient(180deg, color-mix(in oklab, var(--flow-cream) 88%, transparent) 0%, color-mix(in oklab, var(--flow-peach) 80%, transparent) 55%, color-mix(in oklab, var(--flow-cream) 92%, transparent) 100%)",
+            "radial-gradient(520px circle at var(--mx, 70%) var(--my, 30%), color-mix(in oklab, var(--flow-shell) 70%, transparent), transparent 65%)",
         }}
       />
 
-      <div className="mx-auto flex max-w-6xl justify-start px-4 sm:px-6 lg:px-8 lg:pl-6 xl:pl-5">
-        <motion.div variants={container} initial="hidden" animate="show" className="max-w-xl">
-          <motion.span
+      <div className="relative z-[2] mx-auto grid max-w-[1240px] items-center gap-12 px-4 sm:px-6 lg:grid-cols-[1.08fr_1fr] lg:gap-6 lg:px-8">
+        <div>
+          <motion.p
+            {...play}
             variants={item}
-            className="glass-panel inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[13px] font-medium text-(--flow-ink)/80"
+            custom={0.05}
+            className="inline-flex items-center gap-2 rounded-full border border-(--border-subtle) bg-(--flow-shell)/70 py-1.5 pr-3.5 pl-1.5 text-[13px] font-semibold text-(--text-secondary) backdrop-blur-sm"
           >
-            <Sparkle weight="fill" className="size-3.5 text-(--flow-magenta)" />
-            AI that connects your world
-          </motion.span>
-
-          <motion.h1
-            variants={item}
-            className="mt-6 text-[2.75rem] leading-[1.05] font-semibold tracking-tight text-(--flow-ink) sm:text-6xl"
-          >
-            Turn scattered information into <span className="text-gradient-flow">real progress.</span>
-          </motion.h1>
-
-          <motion.p variants={item} className="mt-6 max-w-md text-[17px] leading-relaxed text-(--flow-ink)/70">
-            Connect your tools. Let AI analyze, correlate, and act across Slack, GitHub, Google Drive and more —
-            so you can focus on what really matters.
+            <span className="bg-sunrise rounded-full px-2 py-0.5 text-[11px] font-bold text-(--flow-shell)">New</span>
+            An AI analyst for your Google Sheets
           </motion.p>
 
-          <motion.div variants={item} className="mt-8 flex flex-wrap items-center gap-3">
+          <RevealHeading
+            as="h1"
+            trigger="mount"
+            delay={0.15}
+            className="font-display mt-6 text-[clamp(3rem,6.8vw,6.4rem)] leading-[0.94] text-(--flow-ink)"
+            lines={[
+              { text: "Ask your sheets." },
+              { text: "Approve the answer." },
+              { text: "Alert the team.", className: "text-sunrise" },
+            ]}
+          />
+
+          <motion.p
+            {...play}
+            variants={item}
+            custom={0.75}
+            className="mt-7 max-w-[34rem] text-[17px] leading-relaxed text-(--text-secondary) sm:text-[18px]"
+          >
+            InsightFlow reads your spreadsheets, computes every number with real code, drafts the report, and waits for
+            your yes before anything reaches your team.
+          </motion.p>
+
+          <motion.div {...play} variants={item} custom={0.9} className="mt-9 flex flex-wrap items-center gap-3">
             <Show when="signed-out">
-              <SignUpButton mode="redirect" forceRedirectUrl="/">
-                <button
-                  type="button"
-                  className="bg-gradient-flow group inline-flex items-center gap-2 rounded-full px-6 py-3.5 text-[15px] font-semibold text-(--flow-cream) shadow-[0_16px_32px_-12px_rgba(224,90,143,0.55)] transition-transform hover:scale-[1.03] active:scale-[0.98]"
-                >
-                  Start for Free
-                  <ArrowRight weight="bold" className="size-4 transition-transform group-hover:translate-x-0.5" />
-                </button>
-              </SignUpButton>
+              <Magnetic>
+                <SignUpButton mode="redirect" forceRedirectUrl="/">
+                  <button type="button" className={cn(primaryButtonClass, "px-7 py-3.5 text-[16px]")}>
+                    Start free
+                    <ArrowRight weight="bold" className="size-4 transition-transform duration-200 group-hover:translate-x-1" />
+                  </button>
+                </SignUpButton>
+              </Magnetic>
             </Show>
             <Show when="signed-in">
-              <a
-                href="/dashboard"
-                className="glass-panel inline-flex items-center gap-2 rounded-full px-6 py-3.5 text-[15px] font-semibold text-(--flow-ink) transition-transform hover:scale-[1.02] active:scale-[0.98]"
-              >
-                Welcome back, <span className="text-gradient-flow">{displayName}</span>
-              </a>
+              <Magnetic>
+                <a href="/dashboard" className={cn(primaryButtonClass, "px-7 py-3.5 text-[16px]")}>
+                  Welcome back, {displayName}
+                  <ArrowUpRight weight="bold" className="size-4 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                </a>
+              </Magnetic>
             </Show>
-            <a
-              href="#how-it-works"
-              className="glass-panel inline-flex items-center gap-2.5 rounded-full px-5 py-3.5 text-[15px] font-semibold text-(--flow-ink) transition-transform hover:scale-[1.02] active:scale-[0.98]"
-            >
-              <span className="flex size-6 items-center justify-center rounded-full bg-(--flow-ink)/8">
-                <Play weight="fill" className="size-3 text-(--flow-magenta)" />
-              </span>
-              Watch Demo (2 min)
+            <a href="#how-it-works" className={cn(secondaryButtonClass, "px-6 py-3.5 text-[16px]")}>
+              See how it works
+              <ArrowDown weight="bold" className="size-4 transition-transform duration-200 group-hover:translate-y-0.5" />
             </a>
           </motion.div>
 
-          <motion.div
-            variants={item}
-            className="mt-7 flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] font-medium text-(--flow-ink)/65"
-          >
-            {trustBadges.map((badge) => (
-              <span key={badge.label} className="inline-flex items-center gap-1.5">
-                <badge.icon weight="fill" className="size-3.5 text-(--flow-coral)" />
-                {badge.label}
+          <motion.div {...play} variants={item} custom={1.05} className="mt-10 flex flex-wrap items-center gap-x-5 gap-y-3">
+            <span className="text-[13px] font-medium text-(--text-muted)">Works with</span>
+            {worksWith.map((app) => (
+              <span key={app.label} className="inline-flex items-center gap-2 text-[14px] font-semibold text-(--flow-ink)">
+                <app.icon className="size-5" />
+                {app.label}
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-[11px] font-bold",
+                    app.live ? "bg-(--flow-mint)/45 text-(--flow-ink)" : "bg-(--flow-ink)/[0.06] text-(--text-muted)"
+                  )}
+                >
+                  {app.live ? "Live" : "Soon"}
+                </span>
               </span>
             ))}
           </motion.div>
+        </div>
 
-          <motion.div variants={item} className="mt-10">
-            <p className="text-[11px] font-medium text-(--flow-ink)/45">TRUSTED BY BUILDERS, TEAMS AND CREATORS</p>
-            <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-3">
-              {trustLogos.map((logo) => (
-                <span key={logo.label} className="flex items-center gap-1.5 text-(--flow-ink)/60">
-                  <logo.icon className="size-5" />
-                  <span className="text-sm font-semibold">{logo.label}</span>
-                </span>
-              ))}
-            </div>
+        {/* 3D data field + interactive agent run */}
+        <motion.div style={{ y: visualY }} className="relative flex flex-col items-center">
+          {/* stage: the 3D object gets its own, uncovered space */}
+          <motion.div
+            initial={reduced ? false : { opacity: 0, scale: 0.94 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 1.4, ease: EASE_OUT, delay: 0.2 }}
+            className="relative h-[330px] w-[calc(100%+2rem)] sm:h-[420px] lg:h-[470px] lg:w-[calc(100%+8rem)]"
+          >
+            <div aria-hidden="true" className="absolute inset-x-[15%] top-[10%] bottom-[5%] rounded-full bg-(--flow-shell)/60 blur-3xl" />
+            <HeroScene reduced={reduced} />
+          </motion.div>
+          <motion.div
+            initial={reduced ? false : { opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 1, ease: EASE_OUT, delay: 0.55 }}
+            className="relative z-[3] -mt-10 flex w-full justify-center sm:-mt-14"
+          >
+            <AgentDemo />
           </motion.div>
         </motion.div>
       </div>
-
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.6, delay: 1.2 }}
-        className="mt-16 hidden flex-col items-center gap-1.5 text-[12px] font-medium text-(--flow-ink)/45 sm:flex"
-      >
-        <span>Scroll to explore</span>
-        <CaretDown className="size-3.5 animate-bounce" />
-      </motion.div>
     </section>
   );
 }

@@ -1,133 +1,213 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { ArrowRight, DiscordLogo, GithubLogo, LinkedinLogo, XLogo } from "@phosphor-icons/react";
+import { useEffect, useRef, useState } from "react";
+import { motion, useReducedMotion, useScroll, useTransform } from "framer-motion";
+import { ArrowUp } from "@phosphor-icons/react";
+import { cn } from "@/lib/utils";
 import { LogoVideo } from "@/components/site/logo-video";
-import { sectionContainer, sectionItem, sectionViewport } from "@/lib/motion";
+import { Magnetic } from "@/components/site/primitives";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+// Only links that go somewhere real.
 const columns = [
   {
     heading: "Product",
-    links: ["Overview", "How it works", "Product showcase", "Changelog"],
+    links: [
+      { label: "Features", href: "#product" },
+      { label: "How it works", href: "#how-it-works" },
+      { label: "Integrations", href: "#integrations" },
+      { label: "Use cases", href: "#use-cases" },
+    ],
   },
   {
-    heading: "Integrations",
-    links: ["Slack", "GitHub", "Google Drive", "Notion", "View all"],
-  },
-  {
-    heading: "Use Cases",
-    links: ["Product teams", "Engineering", "Founders", "Operations"],
-  },
-  {
-    heading: "Resources",
-    links: ["Guides", "Docs", "Help Center", "Community"],
-  },
-  {
-    heading: "Company",
-    links: ["About", "Careers", "Privacy", "Terms"],
+    heading: "Account",
+    links: [
+      { label: "Sign in", href: "/sign-in" },
+      { label: "Create an account", href: "/sign-up" },
+      { label: "Dashboard", href: "/dashboard" },
+    ],
   },
 ];
 
-const socials = [
-  { icon: XLogo, label: "X" },
-  { icon: GithubLogo, label: "GitHub" },
-  { icon: LinkedinLogo, label: "LinkedIn" },
-  { icon: DiscordLogo, label: "Discord" },
-];
+const builtWith = ["Google Sheets", "Sarvam-105B", "LangGraph", "Neon Postgres"];
+
+const WORDMARK = "InsightFlow";
+
+type Status = "checking" | "online" | "unreachable";
+
+/** Live API status from the backend's liveness probe. The free Render instance can
+ *  take a while to wake, so a slow reply reads as "waking up", not as an outage. */
+function useApiStatus() {
+  const [status, setStatus] = useState<Status>("checking");
+  useEffect(() => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 45000);
+    fetch(`${API_URL}/api/v1/healthz`, { signal: controller.signal, cache: "no-store" })
+      .then((res) => setStatus(res.ok ? "online" : "unreachable"))
+      .catch(() => setStatus("unreachable"))
+      .finally(() => clearTimeout(timeout));
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, []);
+  return status;
+}
+
+function StatusPill() {
+  const status = useApiStatus();
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (status !== "checking") return;
+    const id = setTimeout(() => setSlow(true), 4000);
+    return () => clearTimeout(id);
+  }, [status]);
+
+  const label = status === "online" ? "API online" : status === "unreachable" ? "API unreachable" : slow ? "API waking up" : "Checking API";
+  const dot = status === "online" ? "var(--flow-mint)" : status === "unreachable" ? "var(--flow-coral)" : "var(--flow-amber)";
+
+  return (
+    <span
+      className="inline-flex items-center gap-2 rounded-full border border-(--border-subtle) bg-(--flow-shell)/80 px-3 py-1.5 text-[13px] font-semibold text-(--flow-ink)"
+      role="status"
+    >
+      <span className="relative flex size-2">
+        {status !== "unreachable" && (
+          <span className="animate-ping-soft absolute inset-0 rounded-full" style={{ background: dot }} />
+        )}
+        <span className="relative size-2 rounded-full" style={{ background: dot }} />
+      </span>
+      {label}
+    </span>
+  );
+}
+
+/** Giant wordmark: rises into view as the footer scrolls in; each letter carries its
+ *  own slice of the sunrise gradient so it can lift independently on hover. */
+function Wordmark() {
+  const ref = useRef<HTMLDivElement>(null);
+  const reduced = useReducedMotion();
+  const { scrollYProgress } = useScroll({ target: ref, offset: ["start end", "end end"] });
+  const y = useTransform(scrollYProgress, [0, 1], reduced ? ["0%", "0%"] : ["45%", "0%"]);
+  const letters = WORDMARK.split("");
+
+  return (
+    <div
+      ref={ref}
+      aria-hidden="true"
+      className="overflow-hidden"
+      style={{
+        maskImage: "linear-gradient(to bottom, #000 30%, transparent 96%)",
+        WebkitMaskImage: "linear-gradient(to bottom, #000 30%, transparent 96%)",
+      }}
+    >
+      <motion.p
+        style={{ y }}
+        className="font-display flex justify-center text-[clamp(3.5rem,15.5vw,14rem)] leading-[0.8] select-none"
+      >
+        {letters.map((ch, i) => (
+          <span
+            key={i}
+            className="inline-block pb-[0.08em] transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-[0.1em]"
+            style={{
+              backgroundImage: "var(--sunrise)",
+              backgroundSize: `${letters.length * 100}% 100%`,
+              backgroundPosition: `${(i / (letters.length - 1)) * 100}% 0`,
+              WebkitBackgroundClip: "text",
+              backgroundClip: "text",
+              color: "transparent",
+            }}
+          >
+            {ch}
+          </span>
+        ))}
+      </motion.p>
+    </div>
+  );
+}
 
 export function Footer() {
   return (
-    <footer className="relative isolate overflow-hidden pt-20 pb-8">
+    <footer className="px-3 pb-3 sm:px-6 sm:pb-6">
       <div
-        className="absolute inset-0 -z-10"
-        style={{
-          background:
-            "linear-gradient(180deg, color-mix(in oklab, var(--flow-peach) 55%, transparent) 0%, color-mix(in oklab, var(--flow-cream) 90%, transparent) 100%)",
-        }}
-      />
-
-      <motion.div
-        variants={sectionContainer}
-        initial="hidden"
-        whileInView="show"
-        viewport={sectionViewport}
-        className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8"
+        className="lux-card lux-grain relative isolate mx-auto max-w-[1240px] overflow-hidden rounded-[36px] sm:rounded-[44px]"
+        style={{ background: "linear-gradient(180deg, var(--flow-shell) 0%, var(--flow-peach) 100%)" }}
       >
-        <div className="grid gap-10 lg:grid-cols-[1.4fr_2fr]">
-          <motion.div variants={sectionItem}>
-            <a href="#top" className="flex items-center gap-2.5">
-              <LogoVideo className="h-9 w-9" />
-              <span className="text-[17px] font-semibold tracking-tight text-(--flow-ink)">InsightFlow</span>
-            </a>
-            <p className="mt-4 max-w-xs text-[13.5px] leading-relaxed text-(--flow-ink)/60">
-              Turn scattered information into real progress.
-            </p>
+        <div aria-hidden="true" className="absolute -top-32 -right-24 -z-10 size-[26rem] rounded-full bg-(--flow-pink)/50 blur-[100px]" />
+        <div aria-hidden="true" className="absolute bottom-0 -left-24 -z-10 size-[24rem] rounded-full bg-(--flow-amber)/30 blur-[100px]" />
 
-            <div className="mt-6">
-              <p className="text-[12px] font-semibold text-(--flow-ink)/70">Stay in the loop</p>
-              <p className="mt-1 text-[12px] text-(--flow-ink)/50">Get product updates, new features and more.</p>
-              <form
-                onSubmit={(event) => event.preventDefault()}
-                className="glass-panel mt-3 flex items-center gap-1.5 rounded-full p-1.5"
-              >
-                <input
-                  type="email"
-                  placeholder="Enter your email"
-                  aria-label="Email address"
-                  className="min-w-0 flex-1 bg-transparent px-3 py-1.5 text-[13px] text-(--flow-ink) placeholder:text-(--flow-ink)/40 focus:outline-none"
-                />
-                <button
-                  type="submit"
-                  aria-label="Subscribe"
-                  className="bg-gradient-flow flex size-8 shrink-0 items-center justify-center rounded-full text-(--flow-cream) transition-transform hover:scale-[1.05] active:scale-[0.98]"
-                >
-                  <ArrowRight weight="bold" className="size-3.5" />
-                </button>
-              </form>
+        <div className="relative z-[2] px-6 pt-12 sm:px-10 sm:pt-14 lg:px-14">
+          {/* top: brand + live status + back to top */}
+          <div className="flex flex-wrap items-start justify-between gap-6">
+            <div>
+              <a href="#top" className="inline-flex items-center gap-2.5">
+                <LogoVideo className="size-10" />
+                <span className="font-display text-[26px] leading-none text-(--flow-ink)">InsightFlow</span>
+              </a>
+              <p className="mt-4 max-w-[34ch] text-[16px] leading-relaxed text-(--text-secondary)">
+                An AI analyst for your Google Sheets, with a{" "}
+                <span className="font-editorial text-sunrise pr-[0.05em] text-[1.1em]">person in charge</span> of what gets sent.
+              </p>
+              <div className="mt-5">
+                <StatusPill />
+              </div>
             </div>
-          </motion.div>
+            <Magnetic strength={14}>
+              <a
+                href="#top"
+                aria-label="Back to top"
+                className="group bg-sunrise flex size-14 items-center justify-center rounded-full text-(--flow-shell) shadow-[0_14px_30px_-12px_color-mix(in_oklab,var(--flow-magenta)_70%,transparent)] transition-transform duration-200 active:scale-95"
+              >
+                <ArrowUp weight="bold" className="size-5 transition-transform duration-300 group-hover:-translate-y-1" />
+              </a>
+            </Magnetic>
+          </div>
 
-          <motion.div variants={sectionItem} className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3">
-            {columns.map((column) => (
-              <div key={column.heading}>
-                <p className="text-[12.5px] font-semibold text-(--flow-ink)">{column.heading}</p>
-                <ul className="mt-3 flex flex-col gap-2.5">
-                  {column.links.map((link) => (
-                    <li key={link}>
+          {/* link columns */}
+          <div className="mt-12 grid grid-cols-2 gap-10 border-t border-(--border-subtle) pt-10 sm:grid-cols-3">
+            {columns.map((col) => (
+              <nav key={col.heading} aria-label={col.heading}>
+                <p className="text-[14px] font-semibold text-(--flow-ink)">{col.heading}</p>
+                <ul className="mt-4 flex flex-col gap-3">
+                  {col.links.map((link) => (
+                    <li key={link.label}>
                       <a
-                        href="#top"
-                        className="text-[13px] text-(--flow-ink)/60 transition-colors hover:text-(--flow-magenta)"
+                        href={link.href}
+                        className="bg-[linear-gradient(var(--flow-magenta),var(--flow-magenta))] bg-[length:0%_1.5px] bg-left-bottom bg-no-repeat pb-0.5 text-[15px] text-(--text-secondary) transition-[background-size,color] duration-300 hover:bg-[length:100%_1.5px] hover:text-(--flow-ink)"
                       >
-                        {link}
+                        {link.label}
                       </a>
                     </li>
                   ))}
                 </ul>
-              </div>
+              </nav>
             ))}
-          </motion.div>
+            <div className="col-span-2 sm:col-span-1">
+              <p className="text-[14px] font-semibold text-(--flow-ink)">Built with</p>
+              <ul className="mt-4 flex flex-wrap gap-2">
+                {builtWith.map((b) => (
+                  <li
+                    key={b}
+                    className={cn("rounded-full bg-(--flow-shell)/80 px-3 py-1.5 text-[13px] font-semibold text-(--text-secondary)")}
+                  >
+                    {b}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          <div className="mt-12 flex flex-col gap-2 text-[13.5px] text-(--text-muted) sm:flex-row sm:justify-between">
+            <p>© 2026 InsightFlow</p>
+            <p>Made in India, for teams that run on spreadsheets.</p>
+          </div>
         </div>
 
-        <motion.div
-          variants={sectionItem}
-          className="mt-14 flex flex-col items-center gap-4 border-t border-(--flow-ink)/10 pt-6 sm:flex-row sm:justify-between"
-        >
-          <p className="text-[12px] text-(--flow-ink)/50">© 2026 InsightFlow. All rights reserved.</p>
-          <div className="flex items-center gap-3">
-            {socials.map((social) => (
-              <a
-                key={social.label}
-                href="#top"
-                aria-label={social.label}
-                className="glass-panel flex size-8 items-center justify-center rounded-full text-(--flow-ink)/70 transition-colors hover:text-(--flow-magenta)"
-              >
-                <social.icon weight="fill" className="size-3.5" />
-              </a>
-            ))}
-          </div>
-          <p className="text-[12px] font-medium text-(--flow-ink)/50">Built for a more connected tomorrow.</p>
-        </motion.div>
-      </motion.div>
+        <div className="relative z-[2] mt-6">
+          <Wordmark />
+        </div>
+      </div>
     </footer>
   );
 }

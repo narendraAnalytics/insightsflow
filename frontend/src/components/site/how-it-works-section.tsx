@@ -1,275 +1,364 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { motion, useInView, useScroll, useSpring, useTransform, type MotionValue } from "framer-motion";
-import { Lightning, MagicWand, PlugsConnected, Stack } from "@phosphor-icons/react";
-import { sectionContainer, sectionItem, sectionViewport } from "@/lib/motion";
+import { AnimatePresence, motion, useReducedMotion, useScroll, useSpring } from "framer-motion";
+import { ChatCircleText, Check, CheckCircle, Hourglass, NotePencil, PaperPlaneTilt, PlugsConnected } from "@phosphor-icons/react";
+import { cn } from "@/lib/utils";
+import { EASE_OUT } from "@/lib/motion";
+import { GoogleSheetsGlyph, NotionGlyph, SlackGlyph } from "@/components/site/brand-icons";
+import { RevealHeading } from "@/components/site/primitives";
 
 const steps = [
   {
+    key: "connect",
     icon: PlugsConnected,
+    accent: "var(--flow-mint)",
+    title: "Connect a sheet",
+    body: "Sign in with Google and pick a spreadsheet in Google's own picker. Choose the tabs you care about. Add more sheets any time.",
+    live: true,
+  },
+  {
+    key: "ask",
+    icon: ChatCircleText,
     accent: "var(--flow-magenta)",
-    label: "Connect",
-    description: "Link your tools in a few clicks.",
+    title: "Ask in plain words",
+    body: "Sarvam-105B works out which steps answer your question. pandas runs each one on your real rows, and the answer streams back with the figures it used.",
+    live: true,
   },
   {
-    icon: MagicWand,
-    accent: "var(--flow-lavender)",
-    label: "Analyze",
-    description: "AI reads and understands your data.",
-  },
-  {
-    icon: Stack,
-    accent: "var(--flow-cyan)",
-    label: "Correlate",
-    description: "Finds patterns across every app.",
-  },
-  {
-    icon: Lightning,
+    key: "draft",
+    icon: NotePencil,
     accent: "var(--flow-coral)",
-    label: "Act",
-    description: "Get clear insights and recommended actions.",
+    title: "Get a draft report",
+    body: "The findings are written up as a short report with the key numbers spelled out, ready for a person to read.",
+    live: false,
   },
-];
+  {
+    key: "approve",
+    icon: CheckCircle,
+    accent: "var(--flow-amber)",
+    title: "Approve it",
+    body: "Read the draft, then approve it or send it back. Until you approve, nothing is written or posted anywhere.",
+    live: false,
+  },
+  {
+    key: "deliver",
+    icon: PaperPlaneTilt,
+    accent: "var(--flow-pink)",
+    title: "Deliver to your team",
+    body: "The approved report is saved to Notion and a summary goes to the right Slack channel.",
+    live: false,
+  },
+] as const;
 
-const STEP_DURATION_MS = 1800;
+type StepKey = (typeof steps)[number]["key"];
 
-// Wavy connector threading through the 4 icon centers (x: 12.5/37.5/62.5/87.5, baseline y: 12)
-// — an agentic-flow style curve instead of a straight timeline.
-const FLOW_PATH = "M12.5,12 C20,22 30,2 37.5,12 C45,2 55,22 62.5,12 C70,22 80,2 87.5,12";
+function StepVisual({ step }: { step: StepKey }) {
+  const reduced = useReducedMotion();
+  const pop = (delay: number) =>
+    reduced
+      ? {}
+      : { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 }, transition: { delay, duration: 0.5, ease: EASE_OUT } };
 
-// Alternating top/bottom converge, so steps zigzag into place on the line as you scroll in.
-const scatterFrom = [
-  { x: -50, y: -90, rotate: -12 },
-  { x: 50, y: 90, rotate: 12 },
-  { x: -50, y: -90, rotate: -12 },
-  { x: 50, y: 90, rotate: 12 },
-];
+  switch (step) {
+    case "connect":
+      return (
+        <div className="flex flex-col gap-3">
+          {[
+            { name: "Sales 2026", tabs: ["Regions", "Monthly"], on: true },
+            { name: "Targets FY27", tabs: ["Regions"], on: true },
+            { name: "Inventory", tabs: ["Stock", "Returns", "Vendors"], on: false },
+          ].map((s, i) => (
+            <motion.div key={s.name} {...pop(0.08 * i)} className="flex items-center gap-3 rounded-2xl bg-(--flow-shell) p-3.5 shadow-(--shadow-sm)">
+              <GoogleSheetsGlyph className="size-8 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[14.5px] font-semibold text-(--flow-ink)">{s.name}</p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {s.tabs.map((t) => (
+                    <span key={t} className="rounded-full bg-(--flow-mint)/30 px-2 py-0.5 text-[11.5px] font-semibold text-(--flow-ink)">
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <span className={cn("rounded-full px-2.5 py-1 text-[11.5px] font-bold", s.on ? "bg-(--flow-mint) text-(--flow-ink)" : "bg-(--flow-ink)/[0.06] text-(--text-muted)")}>
+                {s.on ? "Connected" : "Add"}
+              </span>
+            </motion.div>
+          ))}
+        </div>
+      );
+    case "ask":
+      return (
+        <div className="flex flex-col gap-3">
+          <motion.p {...pop(0)} className="bg-sunrise ml-auto max-w-[85%] rounded-2xl rounded-br-md px-4 py-3 text-[14.5px] font-medium text-(--flow-shell)">
+            Which products missed target in the South last month?
+          </motion.p>
+          <div className="flex flex-wrap gap-1.5">
+            {["read Sales › Monthly", "read Targets › Regions", "join on region", "compare to target"].map((t, i) => (
+              <motion.span key={t} {...pop(0.25 + i * 0.15)} className="inline-flex items-center gap-1 rounded-full bg-(--flow-shell) px-2.5 py-1 font-mono text-[11.5px] text-(--text-secondary) shadow-(--shadow-sm)">
+                <Check weight="bold" className="size-3 text-(--flow-magenta)" />
+                {t}
+              </motion.span>
+            ))}
+          </div>
+          <motion.div {...pop(0.9)} className="rounded-2xl rounded-bl-md bg-(--flow-shell) p-4 shadow-(--shadow-sm)">
+            <p className="text-[14.5px] leading-relaxed text-(--flow-ink)">
+              Three products missed. The biggest gap is <span className="font-semibold">Cold Brew 1L</span>, at{" "}
+              <span className="font-semibold text-(--flow-magenta-700)">₹8,40,000</span> under target.
+            </p>
+            <p className="mt-1.5 text-[12.5px] text-(--text-muted)">In words: eight lakh forty thousand rupees</p>
+          </motion.div>
+        </div>
+      );
+    case "draft":
+      return (
+        <motion.div {...pop(0)} className="rounded-2xl bg-(--flow-shell) p-5 shadow-(--shadow-sm)">
+          <p className="flex items-center gap-2 text-[12.5px] font-semibold text-(--text-muted)">
+            <NotionGlyph className="size-4" /> Draft
+          </p>
+          <p className="font-display mt-2 text-[26px] leading-none text-(--flow-ink)">South, September review</p>
+          <ul className="mt-4 flex flex-col gap-2 text-[14px] text-(--text-secondary)">
+            {["Revenue ₹3.12 crore, up 18.4%", "3 products under target", "Cold Brew 1L gap: ₹8.4 lakh"].map((l, i) => (
+              <motion.li key={l} {...pop(0.2 + i * 0.12)} className="flex gap-2">
+                <span className="mt-2 size-1.5 shrink-0 rounded-full bg-(--flow-coral)" />
+                {l}
+              </motion.li>
+            ))}
+          </ul>
+        </motion.div>
+      );
+    case "approve":
+      return (
+        <div className="flex flex-col gap-3">
+          <motion.div {...pop(0)} className="flex items-center gap-2 rounded-2xl bg-(--flow-amber)/25 px-4 py-3 text-[14px] font-semibold text-(--flow-ink)">
+            <Hourglass weight="fill" className="size-4 text-(--flow-coral-700)" />
+            Waiting for Priya (Finance) to approve
+          </motion.div>
+          <motion.div {...pop(0.15)} className="rounded-2xl bg-(--flow-shell) p-4 shadow-(--shadow-sm)">
+            <p className="text-[14.5px] font-semibold text-(--flow-ink)">South, September review</p>
+            <p className="mt-1 text-[13px] text-(--text-muted)">Goes to Notion › Reports and Slack #south-sales</p>
+            <div className="mt-4 flex gap-2">
+              <span className="bg-sunrise inline-flex flex-1 items-center justify-center gap-1.5 rounded-full py-2.5 text-[14px] font-semibold text-(--flow-shell)">
+                <Check weight="bold" className="size-4" /> Approve
+              </span>
+              <span className="inline-flex flex-1 items-center justify-center rounded-full border border-(--border-strong) py-2.5 text-[14px] font-semibold text-(--flow-ink)">
+                Request changes
+              </span>
+            </div>
+          </motion.div>
+        </div>
+      );
+    case "deliver":
+      return (
+        <div className="flex flex-col gap-3">
+          <motion.div {...pop(0)} className="flex items-center gap-3 rounded-2xl bg-(--flow-shell) p-4 shadow-(--shadow-sm)">
+            <NotionGlyph className="size-7" />
+            <div>
+              <p className="text-[14.5px] font-semibold text-(--flow-ink)">Saved to Reports</p>
+              <p className="text-[12.5px] text-(--text-muted)">South, September review</p>
+            </div>
+          </motion.div>
+          <motion.div {...pop(0.2)} className="flex gap-3 rounded-2xl bg-(--flow-shell) p-4 shadow-(--shadow-sm)">
+            <SlackGlyph className="size-7 shrink-0" />
+            <div>
+              <p className="text-[14px] font-semibold text-(--flow-ink)">#south-sales</p>
+              <p className="mt-0.5 text-[13.5px] leading-relaxed text-(--text-secondary)">
+                South is up 18.4% to ₹3.12 crore. Three products missed target; details in Notion. Approved by Priya.
+              </p>
+            </div>
+          </motion.div>
+        </div>
+      );
+  }
+}
 
-function StepScatter({
-  index,
-  arrangeProgress,
-  children,
-}: {
-  index: number;
-  arrangeProgress: MotionValue<number>;
-  children: React.ReactNode;
-}) {
-  const settle = useSpring(arrangeProgress, { stiffness: 130, damping: 22, mass: 0.6 });
-  const scatter = scatterFrom[index];
-  const x = useTransform(settle, [0, 1], [scatter.x, 0]);
-  const y = useTransform(settle, [0, 1], [scatter.y, 0]);
-  const rotate = useTransform(settle, [0, 1], [scatter.rotate, 0]);
-  const opacity = useTransform(settle, [0, 0.6], [0, 1]);
+/** Wavy rail drawn in pixel space (so particles stay round), with travelling particles. */
+function FlowRail({ progress, reduced }: { progress: ReturnType<typeof useSpring>; reduced: boolean }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [h, setH] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => setH(entry.contentRect.height));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
-  return <motion.div style={{ x, y, rotate, opacity }}>{children}</motion.div>;
+  const segs = 8;
+  let d = "M12,0";
+  for (let i = 0; i < segs; i++) {
+    const y0 = (h / segs) * i;
+    const y1 = (h / segs) * (i + 1);
+    const dx = i % 2 === 0 ? 20 : 4;
+    d += ` C${dx},${y0 + (y1 - y0) * 0.35} ${dx},${y0 + (y1 - y0) * 0.65} 12,${y1}`;
+  }
+
+  return (
+    <div ref={ref} aria-hidden="true" className="absolute top-0 bottom-0 left-0 w-6">
+      {h > 0 && (
+        <svg width="24" height={h} className="absolute inset-0 overflow-visible">
+          <defs>
+            <linearGradient id="rail-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--flow-mint)" />
+              <stop offset="35%" stopColor="var(--flow-magenta)" />
+              <stop offset="70%" stopColor="var(--flow-coral)" />
+              <stop offset="100%" stopColor="var(--flow-amber)" />
+            </linearGradient>
+          </defs>
+          <path d={d} fill="none" stroke="var(--flow-ink)" strokeOpacity={0.1} strokeWidth={2} />
+          {!reduced && (
+            <>
+              <circle r="4" fill="var(--flow-magenta)" style={{ filter: "drop-shadow(0 0 6px var(--flow-magenta))" }}>
+                <animateMotion dur="7s" repeatCount="indefinite" path={d} />
+              </circle>
+              <circle r="3" fill="var(--flow-amber)">
+                <animateMotion dur="7s" begin="-3.5s" repeatCount="indefinite" path={d} />
+              </circle>
+            </>
+          )}
+        </svg>
+      )}
+      {/* scroll-scrubbed fill: scaleY overlay (pathLength bound to scroll is unreliable in this repo) */}
+      <motion.div
+        style={{ scaleY: progress }}
+        className="absolute top-0 left-[11px] h-full w-[2px] origin-top rounded-full bg-[linear-gradient(var(--flow-mint),var(--flow-magenta),var(--flow-coral),var(--flow-amber))]"
+      />
+    </div>
+  );
 }
 
 export function HowItWorksSection() {
-  const sectionRef = useRef<HTMLElement>(null);
-  const stepsRowRef = useRef<HTMLDivElement>(null);
-  const { scrollYProgress: bgProgress } = useScroll({
-    target: sectionRef,
-    offset: ["start end", "end start"],
-  });
-  const y = useTransform(bgProgress, [0, 1], [-25, 25]);
-  const { scrollYProgress: arrangeProgress } = useScroll({
-    target: stepsRowRef,
-    offset: ["start 0.92", "start 0.42"],
-  });
+  const reduced = useReducedMotion() ?? false;
+  const listRef = useRef<HTMLOListElement>(null);
+  const stepRefs = useRef<(HTMLLIElement | null)[]>([]);
+  const [active, setActive] = useState(0);
 
-  const isInView = useInView(sectionRef, { once: true, margin: "-100px" });
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [reducedMotion, setReducedMotion] = useState(false);
+  const { scrollYProgress } = useScroll({ target: listRef, offset: ["start 60%", "end 60%"] });
+  const progress = useSpring(scrollYProgress, { stiffness: 120, damping: 26 });
 
   useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReducedMotion(mq.matches);
-    const handler = (event: MediaQueryListEvent) => setReducedMotion(event.matches);
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) setActive(Number((entry.target as HTMLElement).dataset.index));
+        });
+      },
+      { rootMargin: "-45% 0px -45% 0px" }
+    );
+    stepRefs.current.forEach((el) => el && io.observe(el));
+    return () => io.disconnect();
   }, []);
 
-  useEffect(() => {
-    if (!isInView || reducedMotion) return;
-    const id = setInterval(() => {
-      setActiveIndex((prev) => (prev + 1) % steps.length);
-    }, STEP_DURATION_MS);
-    return () => clearInterval(id);
-  }, [isInView, reducedMotion]);
+  const current = steps[active];
 
   return (
-    <section ref={sectionRef} id="how-it-works" className="relative isolate overflow-hidden py-20 sm:py-28">
-      <motion.div
-        aria-hidden="true"
-        style={{
-          y,
-          background:
-            "radial-gradient(48% 42% at 12% 6%, color-mix(in oklab, var(--flow-lavender) 34%, transparent) 0%, transparent 65%), radial-gradient(42% 38% at 92% 18%, color-mix(in oklab, var(--flow-cyan) 34%, transparent) 0%, transparent 65%), radial-gradient(40% 40% at 50% 100%, color-mix(in oklab, var(--flow-magenta) 26%, transparent) 0%, transparent 68%), radial-gradient(36% 36% at 82% 88%, color-mix(in oklab, var(--flow-coral) 28%, transparent) 0%, transparent 65%)",
-        }}
-        className="absolute inset-0 -z-10"
-      />
-      <div
-        aria-hidden="true"
-        className="animate-float-slower absolute top-0 right-[8%] -z-10 size-60 rounded-full opacity-55 blur-3xl"
-        style={{ background: "radial-gradient(circle, var(--flow-lavender), transparent 70%)" }}
-      />
-      <div
-        aria-hidden="true"
-        className="animate-float-slow absolute bottom-0 left-[6%] -z-10 size-72 rounded-full opacity-50 blur-3xl"
-        style={{ background: "radial-gradient(circle, var(--flow-coral), transparent 70%)" }}
-      />
+    <section id="how-it-works" className="relative isolate py-[clamp(5rem,10vw,9rem)]">
+      <div aria-hidden="true" className="absolute inset-0 -z-10 bg-[linear-gradient(180deg,transparent,color-mix(in_oklab,var(--flow-peach)_70%,transparent)_30%,color-mix(in_oklab,var(--flow-peach)_70%,transparent)_70%,transparent)]" />
 
-      <motion.div
-        variants={sectionContainer}
-        initial="hidden"
-        whileInView="show"
-        viewport={sectionViewport}
-        className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8"
-      >
-        <div className="text-center">
-          <motion.span
-            variants={sectionItem}
-            className="glass-panel inline-flex items-center rounded-full px-3.5 py-1.5 text-[12px] font-semibold tracking-wide text-(--flow-magenta) uppercase"
-          >
-            Simple process
-          </motion.span>
-          <motion.h2
-            variants={sectionItem}
-            className="mt-4 text-3xl font-semibold tracking-tight text-(--flow-ink) sm:text-4xl"
-          >
-            How it works
-          </motion.h2>
-          <motion.p variants={sectionItem} className="mx-auto mt-3 max-w-md text-[15px] text-(--flow-ink)/65">
-            Get from connection to real insight in minutes.
-          </motion.p>
+      <div className="mx-auto max-w-[1240px] px-4 sm:px-6 lg:px-8">
+        <div className="max-w-3xl">
+          <RevealHeading
+            className="font-display text-[clamp(2.4rem,5vw,4.4rem)] leading-[0.98] text-(--flow-ink)"
+            lines={[{ text: "From a question" }, { text: "to a decision", className: "text-sunrise" }, { text: "in five steps." }]}
+          />
+          <p className="mt-5 max-w-[46ch] text-[17px] leading-relaxed text-(--text-secondary)">
+            Steps one and two work today. Drafting, approval and delivery to Notion and Slack are being built now.
+          </p>
         </div>
 
-        <div ref={stepsRowRef} className="relative mt-16">
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute top-8 right-8 left-8 hidden -translate-y-1/2 lg:block"
-            style={{ height: 80 }}
-          >
-            <svg viewBox="0 0 100 24" preserveAspectRatio="none" className="h-full w-full overflow-visible">
-              <defs>
-                <linearGradient id="agentic-flow-gradient" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stopColor="var(--flow-magenta)" />
-                  <stop offset="35%" stopColor="var(--flow-lavender)" />
-                  <stop offset="65%" stopColor="var(--flow-cyan)" />
-                  <stop offset="100%" stopColor="var(--flow-coral)" />
-                </linearGradient>
-              </defs>
-              <path
-                d={FLOW_PATH}
-                fill="none"
-                stroke="var(--flow-ink)"
-                strokeOpacity={0.08}
-                strokeWidth={0.9}
-                vectorEffect="non-scaling-stroke"
-              />
-              <motion.path
-                d={FLOW_PATH}
-                fill="none"
-                stroke="url(#agentic-flow-gradient)"
-                strokeWidth={1.1}
-                strokeLinecap="round"
-                vectorEffect="non-scaling-stroke"
-                pathLength={1}
-                strokeDasharray={1}
-                animate={{ strokeDashoffset: reducedMotion ? 0 : 1 - (activeIndex + 1) / steps.length }}
-                initial={false}
-                transition={{ duration: (STEP_DURATION_MS / 1000) * 0.6, ease: "easeInOut" }}
-              />
-              {!reducedMotion && (
-                <>
-                  <circle r="1.6" fill="var(--flow-cream)" style={{ filter: "drop-shadow(0 0 3px var(--flow-magenta))" }}>
-                    <animateMotion dur="4.5s" repeatCount="indefinite" path={FLOW_PATH} />
-                  </circle>
-                  <circle r="1.2" fill="var(--flow-cyan)" opacity={0.85}>
-                    <animateMotion dur="4.5s" begin="-2.25s" repeatCount="indefinite" path={FLOW_PATH} />
-                  </circle>
-                </>
-              )}
-            </svg>
-          </div>
-
-          <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4 lg:gap-6">
-            {steps.map((step, index) => {
-              const isActive = !reducedMotion && index === activeIndex;
+        <div className="mt-16 grid gap-10 lg:grid-cols-[1fr_1.05fr] lg:gap-16">
+          <ol ref={listRef} className="relative pl-12">
+            <FlowRail progress={progress} reduced={reduced} />
+            {steps.map((step, i) => {
+              const on = i === active;
               return (
-                <StepScatter key={step.label} index={index} arrangeProgress={arrangeProgress}>
-                  <motion.div
-                    variants={sectionItem}
-                    animate={
-                      reducedMotion
-                        ? undefined
-                        : { scale: isActive ? 1.08 : 1, opacity: isActive ? 1 : 0.55 }
-                    }
-                    whileHover={{ scale: isActive ? 1.12 : 1.05, y: -4 }}
-                    transition={{ duration: 0.5, ease: "easeOut" }}
-                    className="relative flex flex-col items-center text-center"
-                  >
-                    <div className="relative">
+                <li
+                  key={step.key}
+                  ref={(el) => {
+                    stepRefs.current[i] = el;
+                  }}
+                  data-index={i}
+                  className="relative flex min-h-[46vh] flex-col justify-center py-8 lg:min-h-[62vh]"
+                >
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "absolute top-1/2 -left-12 flex size-6 -translate-y-1/2 items-center justify-center rounded-full border-2 transition-all duration-500",
+                      on ? "scale-110 border-transparent" : "border-(--border-strong) bg-(--flow-cream)"
+                    )}
+                    style={on ? { background: step.accent, boxShadow: `0 0 0 6px color-mix(in oklab, ${step.accent} 30%, transparent)` } : undefined}
+                  />
+                  <div className={cn("transition-opacity duration-500", on ? "opacity-100" : "opacity-40 max-lg:opacity-100")}>
+                    <div className="flex items-center gap-3">
+                      <span className="tabular text-[14px] font-bold text-(--text-muted)">Step {i + 1}</span>
                       <span
-                        aria-hidden="true"
-                        className="absolute inset-0 -z-10 rounded-full blur-xl transition-opacity duration-500"
-                        style={{
-                          backgroundImage: `radial-gradient(circle, ${step.accent}, transparent 70%)`,
-                          opacity: isActive ? 0.65 : 0.25,
-                        }}
-                      />
-                      {isActive && (
-                        <motion.span
-                          aria-hidden="true"
-                          className="absolute -inset-2 rounded-full"
-                          style={{
-                            backgroundImage:
-                              "conic-gradient(from 0deg, var(--flow-magenta), var(--flow-lavender), var(--flow-cyan), var(--flow-coral), var(--flow-magenta))",
-                            WebkitMask:
-                              "radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px))",
-                            mask: "radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px))",
-                            filter: `drop-shadow(0 0 6px color-mix(in oklab, ${step.accent} 60%, transparent))`,
-                          }}
-                          animate={{ rotate: 360 }}
-                          transition={{ duration: 1.6, ease: "linear", repeat: Infinity }}
-                        />
-                      )}
-                      <motion.span
-                        className="glass-card relative flex size-16 items-center justify-center rounded-full"
-                        animate={
-                          reducedMotion
-                            ? undefined
-                            : {
-                                rotate: isActive ? [18, -10, 0] : 0,
-                                boxShadow: isActive
-                                  ? `0 0 0 6px color-mix(in oklab, ${step.accent} 35%, transparent)`
-                                  : "0 0 0 0px transparent",
-                              }
-                        }
-                        transition={{ duration: 0.6, ease: "easeOut" }}
+                        className={cn(
+                          "rounded-full px-2.5 py-0.5 text-[11.5px] font-bold",
+                          step.live ? "bg-(--flow-mint)/45 text-(--flow-ink)" : "bg-(--flow-ink)/[0.06] text-(--text-muted)"
+                        )}
                       >
-                        <step.icon weight="fill" className="size-6" style={{ color: step.accent }} />
-                      </motion.span>
-                      <span
-                        className={`bg-gradient-flow absolute -top-1 -right-1 flex size-6 items-center justify-center rounded-full text-[11px] font-bold text-(--flow-cream) shadow-[0_6px_14px_-4px_rgba(224,90,143,0.6)] ${
-                          isActive ? "animate-pulse-glow scale-110" : ""
-                        }`}
-                      >
-                        {index + 1}
+                        {step.live ? "Live now" : "Coming soon"}
                       </span>
                     </div>
-                    <h3 className="mt-5 text-[16px] font-semibold text-(--flow-ink)">{step.label}</h3>
-                    <p className="mt-1.5 max-w-[15rem] text-[13.5px] leading-relaxed text-(--flow-ink)/65">
-                      {step.description}
-                    </p>
-                  </motion.div>
-                </StepScatter>
+                    <h3 className="font-display mt-3 flex items-center gap-3 text-[clamp(2rem,3.4vw,2.9rem)] leading-none text-(--flow-ink)">
+                      <step.icon weight="duotone" className="size-9 shrink-0" style={{ color: step.accent }} />
+                      {step.title}
+                    </h3>
+                    <p className="mt-4 max-w-[44ch] text-[17px] leading-relaxed text-(--text-secondary)">{step.body}</p>
+                  </div>
+                  {/* inline visual on small screens (no sticky panel there) */}
+                  <div className="lux-card mt-6 rounded-[24px] bg-(--flow-cream) p-4 lg:hidden">
+                    <StepVisual step={step.key} />
+                  </div>
+                </li>
               );
             })}
+          </ol>
+
+          <div className="hidden lg:block">
+            <div className="sticky top-[calc(50vh-15rem)]">
+              <div className="lux-card lux-grain relative isolate h-[30rem] overflow-hidden rounded-[32px] p-8">
+                <motion.div
+                  aria-hidden="true"
+                  className="absolute -top-24 -right-24 -z-10 size-80 rounded-full blur-3xl"
+                  animate={{ background: current.accent }}
+                  transition={{ duration: 0.8 }}
+                  style={{ opacity: 0.45 }}
+                />
+                <div aria-hidden="true" className="lux-dots absolute inset-0 -z-10 opacity-60" />
+                <div className="flex items-center justify-between">
+                  <p className="text-[13px] font-semibold text-(--text-muted)">
+                    Step {active + 1} of {steps.length}
+                  </p>
+                  <div className="flex gap-1.5">
+                    {steps.map((s, i) => (
+                      <span
+                        key={s.key}
+                        className="h-1.5 rounded-full transition-all duration-500"
+                        style={{ width: i === active ? 28 : 8, background: i <= active ? s.accent : "color-mix(in oklab, var(--flow-ink) 12%, transparent)" }}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <div className="relative z-[2] mt-8">
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={current.key}
+                      initial={reduced ? false : { opacity: 0, y: 24, filter: "blur(8px)" }}
+                      animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                      exit={reduced ? undefined : { opacity: 0, y: -16, filter: "blur(8px)" }}
+                      transition={{ duration: 0.5, ease: EASE_OUT }}
+                    >
+                      <StepVisual step={current.key} />
+                    </motion.div>
+                  </AnimatePresence>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </motion.div>
+      </div>
     </section>
   );
 }
