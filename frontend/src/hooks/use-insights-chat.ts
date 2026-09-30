@@ -36,6 +36,7 @@ export type ConversationSummary = {
   id: string;
   title: string;
   data_source_ids: string[];
+  uses_gmail: boolean;
   updated_at: string;
 };
 
@@ -43,6 +44,7 @@ type ConversationDetail = {
   id: string;
   title: string;
   data_source_ids: string[];
+  uses_gmail: boolean;
   messages: ChatMessage[];
 };
 
@@ -74,7 +76,7 @@ function parseBlock(block: string): { event: string; data: Record<string, unknow
   }
 }
 
-export function useInsightsChat(enabled: boolean, sources: DataSource[]) {
+export function useInsightsChat(enabled: boolean, sources: DataSource[], gmailReady: boolean) {
   const { getToken } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestions | null>(null);
@@ -85,6 +87,9 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[]) {
   // sheets were all removed).
   const [sourceIds, setSourceIds] = useState<string[]>([]);
   const sourceKey = sourceIds.join(",");
+  // Whether the chat may also read the user's recent emails. Like the sheets, it's
+  // chosen before the first question, then locked to the conversation.
+  const [useGmail, setUseGmail] = useState(false);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [opening, setOpening] = useState(false);
   const conversationIdRef = useRef<string | null>(null);
@@ -102,19 +107,23 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[]) {
   }, [sources]);
 
   useEffect(() => {
-    if (!enabled || !sourceKey) return;
+    if (conversationIdRef.current) return;
+    // Nothing else to ask about → default to Gmail; never keep it on once unreadable.
+    setUseGmail((on) => (gmailReady ? on || sources.length === 0 : false));
+  }, [gmailReady, sources.length]);
+
+  useEffect(() => {
+    if (!enabled || (!sourceKey && !useGmail)) return;
     let cancelled = false;
     setSuggestions(null);
     (async () => {
       try {
         const token = await getToken();
-        const res = await apiFetch<Suggestions>(
-          `/api/v1/insights/suggestions?${sourceKey
-            .split(",")
-            .map((id) => `source_ids=${id}`)
-            .join("&")}`,
-          token
-        );
+        const params = [
+          ...sourceKey.split(",").filter(Boolean).map((id) => `source_ids=${id}`),
+          ...(useGmail ? ["gmail=true"] : []),
+        ];
+        const res = await apiFetch<Suggestions>(`/api/v1/insights/suggestions?${params.join("&")}`, token);
         if (!cancelled) setSuggestions(res);
       } catch {
         /* suggestions are a nicety — the chat works without them */
@@ -123,7 +132,7 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[]) {
     return () => {
       cancelled = true;
     };
-  }, [enabled, sourceKey, getToken]);
+  }, [enabled, sourceKey, useGmail, getToken]);
 
   const refreshConversations = useCallback(async () => {
     try {
@@ -184,6 +193,7 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[]) {
             conversation_id: conversationIdRef.current,
             // Only a new chat picks its sheet; an existing one keeps its own.
             data_source_ids: conversationIdRef.current ? undefined : sourceIds,
+            use_gmail: conversationIdRef.current ? undefined : useGmail,
           }),
           signal: controller.signal,
         });
@@ -268,7 +278,7 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[]) {
         void refreshConversations();
       }
     },
-    [busy, sourceIds, getToken, patchAssistant, refreshConversations]
+    [busy, sourceIds, useGmail, getToken, patchAssistant, refreshConversations]
   );
 
   const stop = useCallback(() => abortRef.current?.abort(), []);
@@ -277,7 +287,8 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[]) {
     setConversationId(null);
     conversationIdRef.current = null;
     setSourceIds((current) => pruneSelection(current, sources));
-  }, [sources]);
+    setUseGmail(gmailReady && sources.length === 0);
+  }, [sources, gmailReady]);
 
   const openConversation = useCallback(
     async (id: string) => {
@@ -289,6 +300,7 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[]) {
         setMessages(detail.messages);
         setConversationId(detail.id);
         setSourceIds(detail.data_source_ids);
+        setUseGmail(detail.uses_gmail);
       } catch {
         void refreshConversations();
       } finally {
@@ -320,7 +332,9 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[]) {
     conversations,
     sourceIds,
     setSourceIds,
-    sourceRemoved: conversationId !== null && sourceIds.length === 0,
+    useGmail,
+    setUseGmail,
+    sourceRemoved: conversationId !== null && sourceIds.length === 0 && !useGmail,
     send,
     stop,
     newChat,

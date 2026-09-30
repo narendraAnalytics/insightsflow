@@ -41,9 +41,12 @@ async def create_conversation(
     clerk_user_id: str,
     first_question: str,
     source_ids: list[uuid.UUID],
+    uses_gmail: bool = False,
 ) -> ChatConversation:
     user = await get_or_create_user(session, clerk_user_id)
-    conversation = ChatConversation(user_id=user.id, title=make_title(first_question))
+    conversation = ChatConversation(
+        user_id=user.id, title=make_title(first_question), uses_gmail=uses_gmail
+    )
     session.add(conversation)
     await session.flush()
     session.add_all(

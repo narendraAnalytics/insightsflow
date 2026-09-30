@@ -68,10 +68,13 @@ MAIL_RULE = (
 
 
 def build_system_prompt(infos: list[TableInfo], truncated: bool, mail: bool = False) -> str:
-    tables = "\n".join(
-        f'- "{t.name}" — {t.rows} rows: '
-        + ", ".join(f"{c['column']} ({c['type']})" for c in t.columns)
-        for t in infos
+    tables = (
+        "\n".join(
+            f'- "{t.name}" — {t.rows} rows: '
+            + ", ".join(f"{c['column']} ({c['type']})" for c in t.columns)
+            for t in infos
+        )
+        or "(none — this chat has no sheets, so only email questions can be answered)"
     )
     shared = shared_columns(infos)
     shared_text = (

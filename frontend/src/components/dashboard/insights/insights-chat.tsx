@@ -17,6 +17,8 @@ import {
   Trash,
   WarningCircle,
 } from "@phosphor-icons/react";
+import { GmailGlyph } from "@/components/site/brand-icons";
+import { useGmailConnection } from "@/hooks/use-gmail-connection";
 import { sourceLabel, useGoogleSheetsConnection, type DataSource } from "@/hooks/use-google-sheets-connection";
 import {
   useInsightsChat,
@@ -333,17 +335,23 @@ function HistoryPanel({
 function SourcePicker({
   sources,
   selected,
+  gmailReady,
+  gmailOn,
   locked,
   removed,
   disabled,
   onChange,
+  onGmailChange,
 }: {
   sources: DataSource[];
   selected: string[];
+  gmailReady: boolean;
+  gmailOn: boolean;
   locked: boolean;
   removed: boolean;
   disabled: boolean;
   onChange: (ids: string[]) => void;
+  onGmailChange: (on: boolean) => void;
 }) {
   // Once a chat has started it keeps its sheets — show them, don't offer a switch.
   if (locked) {
@@ -354,7 +362,7 @@ function SourcePicker({
         title="A chat keeps the sheets it started with. Start a new chat to use different ones."
       >
         <LockSimple weight="bold" className="size-3.5 shrink-0 text-(--flow-magenta)" />
-        {removed || used.length === 0 ? (
+        {(removed || used.length === 0) && !gmailOn ? (
           <span className="font-(family-name:--font-zeyada) text-[22px] leading-none font-normal text-(--flow-ink)/75">Sheets removed</span>
         ) : (
           used.map((s) => (
@@ -367,21 +375,33 @@ function SourcePicker({
             </span>
           ))
         )}
+        {gmailOn && (
+          <span
+            className="inline-flex items-center gap-1.5 rounded-full border border-(--flow-cream) bg-(--flow-cream)/80 px-3.5 py-1.5 font-(family-name:--font-zeyada) text-[21px] leading-none font-normal text-(--flow-ink)/85"
+            style={{ boxShadow: raised("var(--flow-peach)") }}
+          >
+            <GmailGlyph className="size-4 shrink-0" />
+            Gmail
+          </span>
+        )}
       </div>
     );
   }
 
   const atLimit = selected.length >= MAX_SOURCES_PER_CHAT;
+  // A chat needs at least one thing to ask about: a sheet or Gmail.
+  const total = selected.length + (gmailOn ? 1 : 0);
+  const optionCount = sources.length + (gmailReady ? 1 : 0);
   const toggle = (id: string) => {
     const on = selected.includes(id);
-    if (on && selected.length === 1) return; // a chat needs at least one sheet
+    if (on && total === 1) return;
     onChange(on ? selected.filter((x) => x !== id) : sources.filter((s) => s.id === id || selected.includes(s.id)).map((s) => s.id));
   };
 
   return (
     <div className="mb-5 flex max-w-full flex-col gap-2 self-start" role="group" aria-label="Sheets to ask about">
       <span className="px-1 font-(family-name:--font-zeyada) text-[22px] leading-none font-normal text-(--flow-magenta)">
-        {sources.length > 1 ? "Asking about (pick one or more)" : "Asking about"}
+        {optionCount > 1 ? "Asking about (pick one or more)" : "Asking about"}
       </span>
       <div className="flex flex-wrap gap-2">
         {sources.map((s) => {
@@ -392,7 +412,7 @@ function SourcePicker({
               type="button"
               role="checkbox"
               aria-checked={on}
-              disabled={disabled || sources.length < 2 || (!on && atLimit)}
+              disabled={disabled || optionCount < 2 || (!on && atLimit)}
               onClick={() => toggle(s.id)}
               className={`inline-flex max-w-full items-center gap-2 rounded-full border px-4 py-1.5 font-(family-name:--font-zeyada) text-[23px] leading-none font-normal transition-transform enabled:hover:-translate-y-0.5 enabled:active:scale-[0.97] disabled:cursor-default ${
                 on
@@ -406,6 +426,27 @@ function SourcePicker({
             </button>
           );
         })}
+        {gmailReady && (
+          <button
+            type="button"
+            role="checkbox"
+            aria-checked={gmailOn}
+            disabled={disabled || optionCount < 2}
+            onClick={() => {
+              if (gmailOn && total === 1) return;
+              onGmailChange(!gmailOn);
+            }}
+            className={`inline-flex max-w-full items-center gap-2 rounded-full border px-4 py-1.5 font-(family-name:--font-zeyada) text-[23px] leading-none font-normal transition-transform enabled:hover:-translate-y-0.5 enabled:active:scale-[0.97] disabled:cursor-default ${
+              gmailOn
+                ? "bg-gradient-flow border-transparent text-(--flow-cream)"
+                : "border-(--flow-cream) bg-(--flow-cream)/85 text-(--flow-ink)/85 disabled:opacity-50"
+            }`}
+            style={{ boxShadow: raised("var(--flow-magenta)") }}
+          >
+            {gmailOn ? <Check weight="bold" className="size-3.5 shrink-0" /> : <GmailGlyph className="size-4 shrink-0" />}
+            <span className="truncate">Gmail (latest emails)</span>
+          </button>
+        )}
       </div>
       {selected.length > 1 && (
         <p className="flex items-center gap-1.5 px-1 font-(family-name:--font-zeyada) text-[21px] leading-none text-(--flow-ink)/80">
@@ -420,8 +461,10 @@ function SourcePicker({
 export function InsightsChat() {
   const reduce = useReducedMotion();
   const { connection, loading } = useGoogleSheetsConnection();
+  const { connection: gmailConnection, loading: gmailLoading } = useGmailConnection();
   const sources = useMemo(() => connection?.sources ?? [], [connection]);
-  const ready = connection?.status === "connected" && sources.length > 0;
+  const gmailReady = gmailConnection?.status === "connected" && gmailConnection.can_read_mail;
+  const ready = (connection?.status === "connected" && sources.length > 0) || gmailReady;
   const {
     messages,
     suggestions,
@@ -431,13 +474,15 @@ export function InsightsChat() {
     conversations,
     sourceIds,
     setSourceIds,
+    useGmail,
+    setUseGmail,
     sourceRemoved,
     send,
     stop,
     newChat,
     openConversation,
     removeConversation,
-  } = useInsightsChat(ready, sources);
+  } = useInsightsChat(ready, sources, gmailReady);
   const [historyOpen, setHistoryOpen] = useState(false);
 
   const [draft, setDraft] = useState("");
@@ -468,7 +513,7 @@ export function InsightsChat() {
     }
   };
 
-  if (loading) {
+  if (loading || gmailLoading) {
     return <p className="px-8 py-10 font-(family-name:--font-zeyada) text-[26px] leading-none text-(--flow-ink)/70">Loading…</p>;
   }
 
@@ -501,8 +546,9 @@ export function InsightsChat() {
 
   const selectedSources = sources.filter((s) => sourceIds.includes(s.id));
   const sheetName =
-    suggestions?.sheet_name ??
-    (selectedSources.length > 0 ? selectedSources.map(sourceLabel).join(" + ") : "your sheet");
+    suggestions?.sheet_name ||
+    [...selectedSources.map(sourceLabel), ...(useGmail ? ["Gmail"] : [])].join(" + ") ||
+    "your sheet";
 
   const historyPanel = (
     <HistoryPanel
@@ -542,6 +588,9 @@ export function InsightsChat() {
       <SourcePicker
         sources={sources}
         selected={sourceIds}
+        gmailReady={gmailReady}
+        gmailOn={useGmail}
+        onGmailChange={setUseGmail}
         locked={conversationId !== null}
         removed={sourceRemoved}
         disabled={busy}
@@ -636,8 +685,14 @@ export function InsightsChat() {
             rows={1}
             maxLength={1000}
             disabled={sourceRemoved}
-            placeholder={sourceRemoved ? "This chat's sheet was removed" : "Which region has the highest revenue?"}
-            aria-label="Ask a question about your sheet"
+            placeholder={
+              sourceRemoved
+                ? "This chat's sheet was removed"
+                : sourceIds.length === 0 && useGmail
+                  ? "Show me my 5 most recent emails"
+                  : "Which region has the highest revenue?"
+            }
+            aria-label="Ask a question about your sheets or email"
             className="max-h-33 min-h-10 flex-1 resize-none bg-transparent py-2 font-(family-name:--font-zeyada) text-[25px] leading-snug font-normal text-(--flow-ink) outline-none placeholder:text-(--flow-ink)/55"
           />
           {busy ? (

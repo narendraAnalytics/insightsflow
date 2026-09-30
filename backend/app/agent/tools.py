@@ -427,6 +427,9 @@ def build_tools(
         else []
     )
 
+    if not tables.tables:  # an email-only chat has no sheet tools to offer
+        return mail_tools
+
     return [
         *mail_tools,
         StructuredTool.from_function(

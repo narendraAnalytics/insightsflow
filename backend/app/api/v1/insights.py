@@ -25,6 +25,8 @@ class AskRequest(BaseModel):
     conversation_id: uuid.UUID | None = None
     # Required to start a conversation (1-5 sheets/tabs); an existing chat keeps its own.
     data_source_ids: list[uuid.UUID] = Field(default_factory=list, max_length=5)
+    # A new chat may also read the user's recent emails (needs Gmail + read scope).
+    use_gmail: bool = False
 
 
 class SuggestionsResponse(BaseModel):
@@ -36,6 +38,7 @@ class ConversationOut(BaseModel):
     id: uuid.UUID
     title: str
     data_source_ids: list[uuid.UUID]
+    uses_gmail: bool
     updated_at: datetime
 
 
@@ -52,16 +55,18 @@ class ConversationDetail(BaseModel):
     id: uuid.UUID
     title: str
     data_source_ids: list[uuid.UUID]
+    uses_gmail: bool
     messages: list[MessageOut]
 
 
 @router.get("/suggestions", response_model=SuggestionsResponse)
 async def suggestions(
-    source_ids: list[uuid.UUID] = Query(..., max_length=5),
+    source_ids: list[uuid.UUID] = Query(default_factory=list, max_length=5),
+    gmail: bool = False,
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> SuggestionsResponse:
-    ctx = await insights_service.load_sheet_context(db, principal.user_id, source_ids)
+    ctx = await insights_service.load_sheet_context(db, principal.user_id, source_ids, gmail)
     return SuggestionsResponse(
         sheet_name=ctx.label, questions=insights_service.suggest_questions(ctx)
     )
@@ -76,7 +81,11 @@ async def list_conversations(
     sources = await chat_service.source_ids_for(db, [c.id for c in rows])
     return [
         ConversationOut(
-            id=c.id, title=c.title, data_source_ids=sources[c.id], updated_at=c.updated_at
+            id=c.id,
+            title=c.title,
+            data_source_ids=sources[c.id],
+            uses_gmail=c.uses_gmail,
+            updated_at=c.updated_at,
         )
         for c in rows
     ]
@@ -96,6 +105,7 @@ async def get_conversation(
         id=conversation.id,
         title=conversation.title,
         data_source_ids=sources[conversation.id],
+        uses_gmail=conversation.uses_gmail,
         messages=[
             MessageOut(
                 id=m.id,
@@ -136,18 +146,19 @@ async def ask(
         if existing
         else body.data_source_ids
     )
-    if not source_ids:
+    use_gmail = existing.uses_gmail if existing else body.use_gmail
+    if not source_ids and not use_gmail:
         raise AppError(
             "This chat's sheets were removed. Start a new chat to ask about another sheet."
             if existing
-            else "Choose a sheet to ask about.",
+            else "Choose a sheet or Gmail to ask about.",
             code="data_source_required",
         )
 
     # Load the sheets first so a missing/inaccessible one never leaves an empty chat behind.
-    ctx = await insights_service.load_sheet_context(db, principal.user_id, source_ids)
+    ctx = await insights_service.load_sheet_context(db, principal.user_id, source_ids, use_gmail)
     conversation = existing or await chat_service.create_conversation(
-        db, principal.user_id, body.question, source_ids
+        db, principal.user_id, body.question, source_ids, use_gmail
     )
     history = await chat_service.history_for(db, conversation.id)
     await chat_service.add_message(db, conversation.id, "user", body.question)

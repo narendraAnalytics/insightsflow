@@ -56,7 +56,8 @@ class SheetContext:
 
     @property
     def label(self) -> str:
-        return " + ".join(self.tables)
+        names = [*self.tables, *(["Gmail"] if self.gmail_token else [])]
+        return " + ".join(names)
 
 
 def _table_names(sources: list[DataSource]) -> list[str]:
@@ -73,39 +74,58 @@ def _table_names(sources: list[DataSource]) -> list[str]:
     return unique
 
 
+class GmailNotReadable(AppError):
+    status_code = 400
+    code = "gmail_not_readable"
+
+
 async def load_sheet_context(
-    session: AsyncSession, clerk_user_id: str, source_ids: list[uuid.UUID]
+    session: AsyncSession,
+    clerk_user_id: str,
+    source_ids: list[uuid.UUID],
+    use_gmail: bool = False,
 ) -> SheetContext:
     """All DB + Google I/O happens here, before streaming starts, so failures
-    surface as normal HTTP errors and the SSE generator never touches the session."""
+    surface as normal HTTP errors and the SSE generator never touches the session.
+    A chat needs at least one sheet or Gmail; Gmail is only readable when the chat
+    opted in (`use_gmail`) AND the connection has the read scope."""
     ids = list(dict.fromkeys(source_ids))  # de-duplicate, keep order
-    if not ids:
-        raise AppError("Choose a sheet to ask about.", code="data_source_required")
+    if not ids and not use_gmail:
+        raise AppError("Choose a sheet or Gmail to ask about.", code="data_source_required")
     if len(ids) > MAX_SOURCES_PER_CHAT:
         raise TooManySourcesInChat(f"A chat can use up to {MAX_SOURCES_PER_CHAT} sheets at once")
 
-    sources = [await data_source_service.get_source(session, clerk_user_id, i) for i in ids]
-    connection = await connection_service.get_connection(session, clerk_user_id)
-    access_token = await connection_service.get_valid_access_token(session, connection)
-
-    previews = await asyncio.gather(
-        *(
-            asyncio.to_thread(
-                google_sheets.fetch_sheet_preview,
-                access_token,
-                src.external_id,
-                src.tab_title or None,
-                MAX_SHEET_ROWS,
+    gmail_token = None
+    if use_gmail:
+        gmail_token = await _gmail_read_token(session, clerk_user_id)
+        if gmail_token is None:
+            raise GmailNotReadable(
+                "Gmail isn't connected with permission to read email. "
+                "Reconnect it on the Integrations page."
             )
-            for src in sources
+
+    tables: dict[str, pd.DataFrame] = {}
+    truncated = False
+    if ids:
+        sources = [await data_source_service.get_source(session, clerk_user_id, i) for i in ids]
+        connection = await connection_service.get_connection(session, clerk_user_id)
+        access_token = await connection_service.get_valid_access_token(session, connection)
+        previews = await asyncio.gather(
+            *(
+                asyncio.to_thread(
+                    google_sheets.fetch_sheet_preview,
+                    access_token,
+                    src.external_id,
+                    src.tab_title or None,
+                    MAX_SHEET_ROWS,
+                )
+                for src in sources
+            )
         )
-    )
-    frames = [build_frame(p.headers, p.rows) for p in previews]
-    return SheetContext(
-        tables=dict(zip(_table_names(sources), frames, strict=True)),
-        truncated=any(len(f) >= MAX_SHEET_ROWS for f in frames),
-        gmail_token=await _gmail_read_token(session, clerk_user_id),
-    )
+        frames = [build_frame(p.headers, p.rows) for p in previews]
+        tables = dict(zip(_table_names(sources), frames, strict=True))
+        truncated = any(len(f) >= MAX_SHEET_ROWS for f in frames)
+    return SheetContext(tables=tables, truncated=truncated, gmail_token=gmail_token)
 
 
 async def _gmail_read_token(session: AsyncSession, clerk_user_id: str) -> str | None:
@@ -163,6 +183,13 @@ def _ranked(columns: list[str], hints: tuple[str, ...]) -> list[str]:
 def suggest_questions(ctx: SheetContext) -> list[str]:
     """Starter questions built from the real columns. With several tables, lead
     with a question that needs a join across a shared column."""
+    email_questions = [
+        "Show me my 5 most recent emails",
+        "Who sent me the latest email?",
+        "What are the subjects of my last 3 emails?",
+    ]
+    if not ctx.tables:
+        return email_questions if ctx.gmail_token else []
     infos = _table_infos(ctx)
 
     def numbers(df: pd.DataFrame) -> list[str]:
@@ -198,7 +225,10 @@ def suggest_questions(ctx: SheetContext) -> list[str]:
         out.append(f"Which {cats[0]} has the highest {nums[0]}?")
     if len(nums) > 1:
         out.append(f"What is the average {nums[1]}?")
-    return list(dict.fromkeys(out))[:4]
+    out = list(dict.fromkeys(out))
+    if ctx.gmail_token:  # a sheet chat that also has Gmail: keep one email starter
+        return [*out[:3], email_questions[0]]
+    return out[:4]
 
 
 def _sse(event: str, data: dict[str, Any]) -> str:
