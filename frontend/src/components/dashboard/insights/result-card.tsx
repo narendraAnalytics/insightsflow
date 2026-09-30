@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { animate, motion, useReducedMotion } from "framer-motion";
-import type { ResultTable } from "@/hooks/use-insights-chat";
+import type { EmailItem, ResultTable } from "@/hooks/use-insights-chat";
 
 const barAccents = [
   "var(--flow-magenta)",
@@ -139,5 +139,84 @@ function Grid({ table }: { table: ResultTable }) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+/** "6:30 AM" today, "Yesterday", else "28 Sep" — in the viewer's own timezone. */
+function emailWhen(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((startOfDay(new Date()) - startOfDay(d)) / 86_400_000);
+  if (days <= 0) return d.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
+  if (days === 1) return "Yesterday";
+  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+}
+
+/** The user's latest emails as a readable list: who, what, and when. */
+export function EmailCard({ emails }: { emails: EmailItem[] }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: "spring", stiffness: 200, damping: 20 }}
+      style={{ boxShadow: cardShadow }}
+      className="w-full max-w-xl overflow-hidden rounded-2xl border border-(--flow-cream) bg-(--flow-cream)/75"
+    >
+      <p className="px-4 pt-3.5 pb-1 font-(family-name:--font-zeyada) text-[24px] leading-none font-normal text-(--flow-magenta)">
+        Your latest emails
+      </p>
+      <ul>
+        {emails.map((mail, i) => {
+          const accent = barAccents[i % barAccents.length];
+          return (
+            <motion.li
+              key={`${mail.date}-${i}`}
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.08 + i * 0.06, duration: 0.35 }}
+              className="flex items-start gap-3 border-t border-(--flow-cream)/80 px-4 py-3 first:border-t-0"
+              title={mail.address || undefined}
+            >
+              <span
+                aria-hidden="true"
+                className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full font-(family-name:--font-zeyada) text-[26px] leading-none font-normal text-(--flow-cream)"
+                style={{ backgroundImage: `linear-gradient(135deg, ${accent}, color-mix(in oklab, ${accent} 55%, var(--flow-coral)))` }}
+              >
+                {(mail.name.trim()[0] ?? "?").toUpperCase()}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    {mail.unread && (
+                      <span
+                        role="img"
+                        aria-label="Unread"
+                        title="Unread"
+                        className="size-2 shrink-0 rounded-full"
+                        style={{ backgroundColor: accent }}
+                      />
+                    )}
+                    <span className="truncate font-(family-name:--font-zeyada) text-[25px] leading-none font-normal text-(--flow-ink)">
+                      {mail.name}
+                    </span>
+                  </span>
+                  <span className="shrink-0 font-(family-name:--font-zeyada) text-[21px] leading-none font-normal" style={{ color: accent }}>
+                    {emailWhen(mail.date)}
+                  </span>
+                </div>
+                <p className={`mt-1 line-clamp-2 text-[13.5px] leading-snug text-(--flow-ink) ${mail.unread ? "font-semibold" : "font-medium"}`}>
+                  {mail.subject}
+                </p>
+                {mail.snippet && (
+                  <p className="mt-0.5 line-clamp-2 text-[12.5px] leading-snug text-(--flow-ink)/60">{mail.snippet}</p>
+                )}
+              </div>
+            </motion.li>
+          );
+        })}
+      </ul>
+    </motion.div>
   );
 }

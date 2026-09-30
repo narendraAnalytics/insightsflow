@@ -40,6 +40,8 @@ class EmailSummary:
     sender: str
     subject: str
     date: str
+    snippet: str
+    unread: bool
 
 
 def has_read_scope(scopes: str) -> bool:
@@ -69,8 +71,8 @@ def exchange_code(code: str, code_verifier: str) -> sheets.GoogleTokens:
 
 def list_recent_messages(access_token: str, count: int = 5) -> list[EmailSummary]:
     """Blocking — call via asyncio.to_thread. Sender, subject and date of the
-    newest inbox messages. Bodies and snippets are deliberately not fetched:
-    less private data leaves Gmail, and less untrusted text reaches the LLM."""
+    newest inbox messages. Only Gmail's own short preview snippet is
+    included, never the full body."""
     count = max(1, min(count, MAX_MESSAGES))
     service = build(
         "gmail",
@@ -106,6 +108,8 @@ def list_recent_messages(access_token: str, count: int = 5) -> list[EmailSummary
                     sender=headers.get("from", ""),
                     subject=headers.get("subject", "(no subject)"),
                     date=headers.get("date", ""),
+                    snippet=msg.get("snippet", ""),
+                    unread="UNREAD" in msg.get("labelIds", []),
                 )
             )
         return out

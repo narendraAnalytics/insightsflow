@@ -28,7 +28,7 @@ import {
   type Step,
   MAX_SOURCES_PER_CHAT,
 } from "@/hooks/use-insights-chat";
-import { TableCard, ValueCard } from "@/components/dashboard/insights/result-card";
+import { EmailCard, TableCard, ValueCard } from "@/components/dashboard/insights/result-card";
 
 // Deep, bright accents (no blue/violet) — used to tell suggestion chips apart.
 const chipAccents = [
@@ -140,7 +140,9 @@ function StepChip({ step }: { step: Step }) {
 }
 
 function AssistantMessage({ message }: { message: ChatMessage }) {
-  const cards = message.steps.filter((s) => s.status === "done" && (s.table || typeof s.value === "number"));
+  const cards = message.steps.filter(
+    (s) => s.status === "done" && (s.table || s.emails?.length || typeof s.value === "number")
+  );
   const lastStep = message.steps[message.steps.length - 1];
   const headline: Headline | null =
     [...message.steps].reverse().find((s) => s.status === "done" && s.headline)?.headline ?? null;
@@ -169,7 +171,9 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
         )}
 
         {cards.map((s) =>
-          s.table ? (
+          s.emails?.length ? (
+            <EmailCard key={s.id} emails={s.emails} />
+          ) : s.table ? (
             <TableCard key={s.id} table={s.table} />
           ) : (
             <ValueCard key={s.id} value={s.value as number} label={s.summary ?? ""} />

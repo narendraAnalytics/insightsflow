@@ -6,6 +6,9 @@ arithmetic. Tools return JSON strings: {"summary", "table"?, ...values}.
 import json
 import re
 from collections.abc import Callable
+from datetime import UTC
+from email.utils import parseaddr, parsedate_to_datetime
+from html import unescape
 from typing import Any, Literal
 
 import pandas as pd
@@ -247,9 +250,31 @@ def _join(
     return f"{lname}_{rname}", merged, stats
 
 
+def _email_card(raw: dict[str, Any]) -> dict[str, Any]:
+    """One inbox message as UI-ready fields: the sender's display name and address
+    split apart, and the Date header as an ISO-8601 UTC string (None if unparseable)."""
+    name, address = parseaddr(raw.get("sender", ""))
+    try:
+        when = parsedate_to_datetime(raw.get("date", ""))
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=UTC)
+        iso: str | None = when.astimezone(UTC).isoformat()
+    except (TypeError, ValueError):
+        iso = None
+    return {
+        "name": name or address or "Unknown sender",
+        "address": address,
+        "subject": raw.get("subject", "").strip() or "(no subject)",
+        "date": iso,
+        # Gmail's own short preview (HTML-escaped); the full body is never fetched.
+        "snippet": unescape(raw.get("snippet", "")).strip()[:160],
+        "unread": bool(raw.get("unread", False)),
+    }
+
+
 def build_tools(
     tables: TableSet | pd.DataFrame,
-    fetch_emails: Callable[[int], list[dict[str, str]]] | None = None,
+    fetch_emails: Callable[[int], list[dict[str, Any]]] | None = None,
 ) -> list[BaseTool]:
     """Tools closed over one request's tables. A bare DataFrame is accepted for
     the single-sheet case and becomes a one-table set named 'sheet'.
@@ -264,10 +289,11 @@ def build_tools(
             rows = fetch_emails(max(1, min(count, 10)))
         except Exception as e:  # network / Gmail failure — let the model explain it
             return _err(str(e) if isinstance(e, AppError) else "Could not read Gmail right now.")
-        cols = ["From", "Subject", "Date"]
+        # Structured `emails` (not a table): the UI renders them as readable cards,
+        # so the model only needs to add a short sentence, not repeat the list.
         return _ok(
             f"{len(rows)} most recent inbox email(s)",
-            table={"columns": cols, "rows": [[r["sender"], r["subject"], r["date"]] for r in rows]},
+            emails=[_email_card(r) for r in rows],
         )
 
     def describe_sheet(table: str | None = None) -> str:

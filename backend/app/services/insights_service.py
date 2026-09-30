@@ -257,6 +257,7 @@ def _tool_result_event(msg: ToolMessage) -> dict[str, Any]:
         "value": payload.get("value"),
         "table": payload.get("table"),
         "headline": payload.get("headline"),
+        "emails": payload.get("emails"),
     }
 
 
@@ -353,6 +354,7 @@ async def stream_answer(
                                             value=result.get("value"),
                                             table=result.get("table"),
                                             headline=result.get("headline"),
+                                            emails=result.get("emails"),
                                         )
                                 yield _sse("tool_result", result)
         yield _sse("done", {})

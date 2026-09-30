@@ -9,6 +9,16 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export type ResultTable = { columns: string[]; rows: (string | number | null)[][] };
 
+/** One inbox message, parsed by the backend for display. */
+export type EmailItem = {
+  name: string;
+  address: string;
+  subject: string;
+  date: string | null;
+  snippet: string;
+  unread: boolean;
+};
+
 export type Headline = { label: string | null; value: number; words: string };
 
 export type Step = {
@@ -19,6 +29,7 @@ export type Step = {
   value?: number | null;
   table?: ResultTable | null;
   headline?: Headline | null;
+  emails?: EmailItem[] | null;
 };
 
 export type ChatMessage = {
@@ -246,6 +257,7 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[], gmailRe
                         value: d.value,
                         table: d.table,
                         headline: d.headline,
+                        emails: d.emails,
                       }
                     : s
                 ),

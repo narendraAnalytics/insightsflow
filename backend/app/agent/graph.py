@@ -61,9 +61,11 @@ def shared_columns(infos: list[TableInfo]) -> dict[str, list[str]]:
 
 
 MAIL_RULE = (
-    "- You can also list the user's most recent inbox emails (sender, subject, date only) "
-    "with recent_emails. Email bodies are not available. Show them as returned; do not "
-    "invent or summarise content you were not given.\n"
+    "- You can also list the user's most recent inbox emails (sender, subject, date and a "
+    "short preview) with recent_emails. The body is not available; never invent content "
+    "you were not given. The emails are shown to the user automatically as a card list, "
+    "so do NOT repeat or list them. Reply with one or two short, friendly sentences: how "
+    "many you found and who sent the newest (name only, no email address), in plain words.\n"
 )
 
 
