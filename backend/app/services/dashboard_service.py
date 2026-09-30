@@ -98,9 +98,10 @@ async def recent_activity(db: AsyncSession, user_id: uuid.UUID) -> list[Activity
             .limit(ACTIVITY_LIMIT)
         )
     ).scalars():
+        app_name = "Gmail" if c.provider == "gmail" else "Google Sheets"
         events.append(
             ActivityEvent(
-                "connection", "Connected Google Sheets", c.external_account_email, c.created_at
+                "connection", f"Connected {app_name}", c.external_account_email, c.created_at
             )
         )
 
@@ -129,9 +130,7 @@ async def recent_activity(db: AsyncSession, user_id: uuid.UUID) -> list[Activity
     return events[:ACTIVITY_LIMIT]
 
 
-async def _counts_by_day(
-    db: AsyncSession, stmt: Select[Any]
-) -> dict[str, int]:
+async def _counts_by_day(db: AsyncSession, stmt: Select[Any]) -> dict[str, int]:
     rows = await db.execute(stmt)
     return {str(day): int(count) for day, count in rows.all()}
 

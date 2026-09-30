@@ -12,12 +12,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.errors import NotFoundError
 from app.core.oauth_state import verify_state
 from app.core.security import Principal, get_current_principal
 from app.db.models.connection import Connection
 from app.db.models.data_source import DataSource
 from app.db.session import get_db
+from app.integrations.google import gmail as google_gmail
 from app.services import connection_service, data_source_service
 
 router = APIRouter(prefix="/connections", tags=["connections"])
@@ -79,6 +79,7 @@ class ConnectionResponse(BaseModel):
     provider: str
     status: str
     external_account_email: str | None
+    can_read_mail: bool
     sources: list[DataSourceOut]
 
     @classmethod
@@ -87,6 +88,7 @@ class ConnectionResponse(BaseModel):
             provider=c.provider,
             status=c.status,
             external_account_email=c.external_account_email,
+            can_read_mail=c.provider == "gmail" and google_gmail.has_read_scope(c.scopes),
             sources=[DataSourceOut.from_model(s) for s in sources],
         )
 
@@ -178,12 +180,15 @@ async def list_connections(
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> list[ConnectionResponse]:
-    try:
-        connection = await connection_service.get_connection(db, principal.user_id)
-    except NotFoundError:
-        return []
-    sources = await data_source_service.refresh_stale_sources(db, principal.user_id)
-    return [ConnectionResponse.from_model(connection, sources)]
+    connections = await connection_service.list_connections(db, principal.user_id)
+    out: list[ConnectionResponse] = []
+    for connection in connections:
+        # Only Sheets connections own data sources; other providers (Gmail) have none.
+        sources: list[DataSource] = []
+        if connection.provider == "google_sheets":
+            sources = await data_source_service.refresh_stale_sources(db, principal.user_id)
+        out.append(ConnectionResponse.from_model(connection, sources))
+    return out
 
 
 @router.delete("/google", status_code=204)
@@ -192,3 +197,38 @@ async def google_disconnect(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     await connection_service.disconnect(db, principal.user_id)
+
+
+@router.get("/gmail/connect-url", response_model=ConnectUrlResponse)
+async def gmail_connect_url(
+    principal: Principal = Depends(get_current_principal),
+) -> ConnectUrlResponse:
+    url = await connection_service.start_google_connect(principal.user_id, "gmail")
+    return ConnectUrlResponse(url=url)
+
+
+@router.get("/gmail/callback")
+async def gmail_callback(
+    code: str | None = Query(default=None),
+    state: str = Query(...),
+    error: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> RedirectResponse:
+    settings = get_settings()
+    base = f"{settings.frontend_url}/dashboard/integrations"
+    # The user clicked "Cancel"/"Deny" on Google's consent screen.
+    if error or not code:
+        return RedirectResponse(url=f"{base}?gmail_error=denied")
+    clerk_user_id, code_verifier = verify_state(state)
+    await connection_service.complete_google_connect(
+        db, clerk_user_id, code, code_verifier, "gmail"
+    )
+    return RedirectResponse(url=f"{base}?connected=gmail")
+
+
+@router.delete("/gmail", status_code=204)
+async def gmail_disconnect(
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await connection_service.disconnect(db, principal.user_id, "gmail")

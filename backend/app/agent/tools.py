@@ -5,6 +5,7 @@ arithmetic. Tools return JSON strings: {"summary", "table"?, ...values}.
 
 import json
 import re
+from collections.abc import Callable
 from typing import Any, Literal
 
 import pandas as pd
@@ -12,6 +13,7 @@ from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel
 
 from app.agent.numbers import number_to_words
+from app.core.errors import AppError
 
 MAX_ROWS_RETURNED = 20
 Op = Literal["sum", "mean", "median", "min", "max", "count"]
@@ -245,11 +247,28 @@ def _join(
     return f"{lname}_{rname}", merged, stats
 
 
-def build_tools(tables: TableSet | pd.DataFrame) -> list[BaseTool]:
+def build_tools(
+    tables: TableSet | pd.DataFrame,
+    fetch_emails: Callable[[int], list[dict[str, str]]] | None = None,
+) -> list[BaseTool]:
     """Tools closed over one request's tables. A bare DataFrame is accepted for
-    the single-sheet case and becomes a one-table set named 'sheet'."""
+    the single-sheet case and becomes a one-table set named 'sheet'.
+    `fetch_emails(count)` (rows of sender/subject/date) enables `recent_emails`
+    — it is only passed when the user's Gmail connection may read mail."""
     if isinstance(tables, pd.DataFrame):
         tables = TableSet({"sheet": tables})
+
+    def recent_emails(count: int = 5) -> str:
+        assert fetch_emails is not None
+        try:
+            rows = fetch_emails(max(1, min(count, 10)))
+        except Exception as e:  # network / Gmail failure — let the model explain it
+            return _err(str(e) if isinstance(e, AppError) else "Could not read Gmail right now.")
+        cols = ["From", "Subject", "Date"]
+        return _ok(
+            f"{len(rows)} most recent inbox email(s)",
+            table={"columns": cols, "rows": [[r["sender"], r["subject"], r["date"]] for r in rows]},
+        )
 
     def describe_sheet(table: str | None = None) -> str:
         try:
@@ -392,7 +411,24 @@ def build_tools(tables: TableSet | pd.DataFrame) -> list[BaseTool]:
             matching_rows=len(sub),
         )
 
+    mail_tools: list[BaseTool] = (
+        [
+            StructuredTool.from_function(
+                recent_emails,
+                name="recent_emails",
+                description=(
+                    "The sender, subject and date of the user's most recent inbox emails "
+                    "(default 5, max 10). Use for 'show my latest emails'. "
+                    "Bodies are not available."
+                ),
+            )
+        ]
+        if fetch_emails
+        else []
+    )
+
     return [
+        *mail_tools,
         StructuredTool.from_function(
             describe_sheet,
             name="describe_sheet",
@@ -443,6 +479,8 @@ def build_tools(tables: TableSet | pd.DataFrame) -> list[BaseTool]:
 def tool_label(name: str, args: dict[str, Any]) -> str:
     """Human-readable step label for the UI."""
     where = f" in {args['table']}" if args.get("table") else ""
+    if name == "recent_emails":
+        return f"Reading your {args.get('count', 5)} latest emails"
     if name == "describe_sheet":
         return "Reading the sheet structure"
     if name == "join_tables":

@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { GmailCard } from "@/components/dashboard/integrations/gmail-card";
 import { GoogleSheetsCard } from "@/components/dashboard/integrations/google-sheets-card";
 
 export default function IntegrationsPage() {
@@ -12,6 +14,9 @@ export default function IntegrationsPage() {
 
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
         <GoogleSheetsCard />
+        <Suspense fallback={null}>
+          <GmailCard />
+        </Suspense>
       </div>
     </div>
   );

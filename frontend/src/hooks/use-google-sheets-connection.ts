@@ -47,7 +47,7 @@ export function useGoogleSheetsConnection() {
     try {
       const token = await getToken();
       const rows = await apiFetch<GoogleSheetsConnection[]>("/api/v1/connections", token);
-      setConnection(rows[0] ?? null);
+      setConnection(rows.find((r) => r.provider === "google_sheets") ?? null);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load connection");

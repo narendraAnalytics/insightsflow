@@ -5,7 +5,7 @@ import asyncio
 import json
 import uuid
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any
 
 import pandas as pd
@@ -23,9 +23,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agent.graph import TableInfo, build_graph, build_system_prompt, shared_columns
 from app.agent.llm import build_llm
 from app.agent.tools import TableSet, build_frame, build_tools, describe_schema, tool_label
-from app.core.errors import AppError
+from app.core.errors import AppError, NotFoundError
 from app.db.models.data_source import DataSource
 from app.db.session import get_sessionmaker
+from app.integrations.google import gmail as google_gmail
 from app.integrations.google import sheets as google_sheets
 from app.services import chat_service, connection_service, data_source_service
 
@@ -50,6 +51,8 @@ class SheetContext:
 
     tables: dict[str, pd.DataFrame]  # table name -> data
     truncated: bool
+    # Set only when the user's Gmail connection has the read scope (dev-only feature).
+    gmail_token: str | None = None
 
     @property
     def label(self) -> str:
@@ -101,7 +104,24 @@ async def load_sheet_context(
     return SheetContext(
         tables=dict(zip(_table_names(sources), frames, strict=True)),
         truncated=any(len(f) >= MAX_SHEET_ROWS for f in frames),
+        gmail_token=await _gmail_read_token(session, clerk_user_id),
     )
+
+
+async def _gmail_read_token(session: AsyncSession, clerk_user_id: str) -> str | None:
+    """A Gmail access token, only if Gmail is connected WITH the read scope.
+    Never blocks sheet Q&A: any failure (not connected, revoked, expired
+    refresh token) just means the email tool isn't offered."""
+    try:
+        connection = await connection_service.get_connection(session, clerk_user_id, "gmail")
+        if connection.status != "connected" or not google_gmail.has_read_scope(connection.scopes):
+            return None
+        return await connection_service.get_valid_access_token(session, connection)
+    except NotFoundError:
+        return None
+    except Exception:
+        logger.warning("gmail_token_unavailable", exc_info=True)
+        return None
 
 
 def _table_infos(ctx: SheetContext) -> list[TableInfo]:
@@ -252,8 +272,14 @@ async def stream_answer(
     try:
         yield _sse("conversation", {"id": str(conversation_id), "title": title})
         llm = build_llm()
-        graph = build_graph(llm, build_tools(TableSet(ctx.tables)))
-        system = build_system_prompt(_table_infos(ctx), ctx.truncated)
+        token = ctx.gmail_token
+        fetch_emails = (
+            (lambda n: [asdict(m) for m in google_gmail.list_recent_messages(token, n)])
+            if token
+            else None
+        )
+        graph = build_graph(llm, build_tools(TableSet(ctx.tables), fetch_emails))
+        system = build_system_prompt(_table_infos(ctx), ctx.truncated, mail=bool(token))
         messages = [
             SystemMessage(content=system),
             *_history_messages(history),

@@ -29,7 +29,7 @@ const tabAccents = [
  * slab, but `perspective` + `preserve-3d` + `translateZ` makes the browser rasterise
  * text as a scaled texture, which is what made everything look slightly blurry.)
  */
-function GlassSlab({ children }: { children: ReactNode }) {
+export function GlassSlab({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const reduceMotion = useReducedMotion();
 
@@ -71,7 +71,7 @@ function GlassSlab({ children }: { children: ReactNode }) {
 const raised = (accent: string) =>
   `0 14px 26px -18px color-mix(in oklab, ${accent} 65%, transparent), inset 3px 0 0 ${accent}, inset 0 1px 0 rgb(255 255 255 / 0.8)`;
 
-function StatusPill({ connected }: { connected: boolean }) {
+export function StatusPill({ connected }: { connected: boolean }) {
   return connected ? (
     <span className="inline-flex items-center gap-2 rounded-full bg-(--flow-cream) px-3 py-1.5 font-(family-name:--font-zeyada) text-[20px] leading-none font-normal text-(--flow-ink) shadow-[0_8px_18px_-10px_oklch(0.66_0.12_190)]">
       <span className="relative flex size-2">

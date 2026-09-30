@@ -51,14 +51,12 @@ class GoogleTokens:
     email: str | None
 
 
-def _client_config() -> dict:
+def _client_config(redirect_uri: str | None) -> dict:
     settings = get_settings()
-    has_config = (
-        settings.google_client_id and settings.google_client_secret and settings.google_redirect_uri
-    )
-    if not has_config:
+    if not (settings.google_client_id and settings.google_client_secret and redirect_uri):
         raise GoogleOAuthNotConfigured(
-            "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI must be set"
+            "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET and the redirect URI for this "
+            "provider must be set"
         )
     return {
         "web": {
@@ -66,15 +64,14 @@ def _client_config() -> dict:
             "client_secret": settings.google_client_secret,
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": TOKEN_URI,
-            "redirect_uris": [settings.google_redirect_uri],
+            "redirect_uris": [redirect_uri],
         }
     }
 
 
-def _flow() -> Flow:
-    settings = get_settings()
-    flow = Flow.from_client_config(_client_config(), scopes=SCOPES)
-    flow.redirect_uri = settings.google_redirect_uri
+def _flow(scopes: list[str], redirect_uri: str | None) -> Flow:
+    flow = Flow.from_client_config(_client_config(redirect_uri), scopes=scopes)
+    flow.redirect_uri = redirect_uri
     return flow
 
 
@@ -84,25 +81,44 @@ def generate_code_verifier() -> str:
     return secrets.token_urlsafe(64)
 
 
-def build_auth_url(state: str, code_verifier: str) -> str:
+def build_auth_url(
+    state: str,
+    code_verifier: str,
+    *,
+    scopes: list[str] | None = None,
+    redirect_uri: str | None = None,
+    include_granted_scopes: bool = True,
+) -> str:
     """Runs synchronously (no network call) — safe to call directly.
     `code_verifier` must be the same value passed to `exchange_code` for
     the same flow (see app/core/oauth_state.py for how it survives the
-    round trip to Google and back)."""
-    flow = _flow()
+    round trip to Google and back). Defaults are the Sheets flow; Gmail
+    passes its own scopes/redirect and turns `include_granted_scopes` off so
+    its token carries only Gmail's scope (a separate consent)."""
+    flow = _flow(scopes or SCOPES, redirect_uri or get_settings().google_redirect_uri)
     flow.code_verifier = code_verifier
+    auth_kwargs: dict[str, str] = {}
+    if include_granted_scopes:
+        auth_kwargs["include_granted_scopes"] = "true"
     auth_url, _ = flow.authorization_url(
         access_type="offline",
-        include_granted_scopes="true",
         prompt="consent",  # forces a refresh_token even on a re-connect
         state=state,
+        **auth_kwargs,
     )
     return auth_url
 
 
-def exchange_code(code: str, code_verifier: str) -> GoogleTokens:
+def exchange_code(
+    code: str,
+    code_verifier: str,
+    *,
+    scopes: list[str] | None = None,
+    redirect_uri: str | None = None,
+) -> GoogleTokens:
     """Blocking — call via asyncio.to_thread."""
-    flow = _flow()
+    scopes = scopes or SCOPES
+    flow = _flow(scopes, redirect_uri or get_settings().google_redirect_uri)
     flow.code_verifier = code_verifier
     flow.fetch_token(code=code)
     creds = flow.credentials
@@ -125,7 +141,7 @@ def exchange_code(code: str, code_verifier: str) -> GoogleTokens:
         access_token=creds.token,
         refresh_token=creds.refresh_token,
         expires_at=expires_at,
-        scopes=list(creds.scopes or SCOPES),
+        scopes=list(creds.scopes or scopes),
         email=email,
     )
 

@@ -66,6 +66,9 @@ class Settings(BaseSettings):
     google_client_id: str | None = None
     google_client_secret: str | None = None
     google_redirect_uri: str | None = None
+    # Gmail reuses the same OAuth client (id/secret) but has its own consent
+    # flow and callback, so it needs its own registered redirect URI.
+    google_gmail_redirect_uri: str | None = None
     oauth_state_secret: str | None = None
     token_encryption_keys: str | None = None
 
