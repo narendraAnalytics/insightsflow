@@ -63,6 +63,8 @@ async def locate_draft(
 
 def ensure_unsent(draft: dict[str, Any]) -> None:
     """Only a fresh (or failed) draft may be sent or scheduled."""
+    if draft.get("kind") == "slack":  # a Slack draft is posted via slack_service, never emailed
+        raise NotFoundError("Draft not found")
     if draft.get("status") == "sent":
         raise DraftAlreadySent("This email was already sent.")
     if draft.get("status") == "scheduled":

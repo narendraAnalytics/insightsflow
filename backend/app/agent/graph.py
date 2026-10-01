@@ -80,8 +80,23 @@ SEND_RULE = (
 )
 
 
+SLACK_RULE = (
+    "- When the user asks you to post, send or share a result to Slack (or 'the team'), first "
+    "get the numbers with the analysis tools, then call draft_slack_message ONCE with a short "
+    "plain-text message: a one-line headline naming the finding, then the key figures from "
+    "tool results. "
+    "You cannot post: the user reviews the draft card and clicks Post. Never say a message was "
+    "posted. After drafting, reply with one short sentence telling them to review and post it; "
+    "do NOT repeat the message text.\n"
+)
+
+
 def build_system_prompt(
-    infos: list[TableInfo], truncated: bool, mail: bool = False, send: bool = False
+    infos: list[TableInfo],
+    truncated: bool,
+    mail: bool = False,
+    send: bool = False,
+    slack: bool = False,
 ) -> str:
     tables = (
         "\n".join(
@@ -100,7 +115,9 @@ def build_system_prompt(
         else ""
     )
     note = " (each limited to its first 5,000 rows)" if truncated else ""
-    mail_rules = (MAIL_RULE if mail else "") + (SEND_RULE if send else "")
+    mail_rules = (
+        (MAIL_RULE if mail else "") + (SEND_RULE if send else "") + (SLACK_RULE if slack else "")
+    )
     return SYSTEM_PROMPT.format(truncated=note, tables=tables, shared=shared_text, mail=mail_rules)
 
 

@@ -4,8 +4,9 @@ import type { ReactElement, SVGProps } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ChatCircleText, FolderOpen, Plug, Plus, Stack } from "@phosphor-icons/react";
-import { GmailGlyph, GoogleSheetsGlyph } from "@/components/site/brand-icons";
+import { GmailGlyph, GoogleSheetsGlyph, SlackGlyph } from "@/components/site/brand-icons";
 import { useGmailConnection } from "@/hooks/use-gmail-connection";
+import { useSlackConnection } from "@/hooks/use-slack-connection";
 import { sourceLabel, useGoogleSheetsConnection, type DataSource } from "@/hooks/use-google-sheets-connection";
 
 const Z = "font-(family-name:--font-zeyada)";
@@ -54,22 +55,22 @@ type AppChip = {
 };
 
 /** The apps shown on a project. Google Sheets (the project's own source) and Gmail reflect
- * the real connection; Notion and Slack are placeholders so the "more apps soon" promise
+ * the real connection; Notion is a placeholder so the "more apps soon" promise
  * stays visible without faking data. */
-function appChips(gmailConnected: boolean): AppChip[] {
+function appChips(gmailConnected: boolean, slackConnected: boolean): AppChip[] {
   return [
     { label: "Google Sheets", live: true, Glyph: GoogleSheetsGlyph },
     { label: "Gmail", live: gmailConnected, Glyph: GmailGlyph, note: "not connected" },
+    { label: "Slack", live: slackConnected, Glyph: SlackGlyph, note: "not connected" },
     { label: "Notion", live: false, note: "soon" },
-    { label: "Slack", live: false, note: "soon" },
   ];
 }
 
-function ConnectedAppsRow({ gmailConnected }: { gmailConnected: boolean }) {
+function ConnectedAppsRow({ gmailConnected, slackConnected }: { gmailConnected: boolean; slackConnected: boolean }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span className={`${Z} text-[20px] leading-none font-normal text-(--flow-ink)/70`}>Connected apps</span>
-      {appChips(gmailConnected).map((app) => (
+      {appChips(gmailConnected, slackConnected).map((app) => (
         <span
           key={app.label}
           className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 ${Z} text-[19px] leading-none font-normal ${
@@ -96,11 +97,13 @@ function ProjectCard({
   accent,
   index,
   gmailConnected,
+  slackConnected,
 }: {
   project: Project;
   accent: string;
   index: number;
   gmailConnected: boolean;
+  slackConnected: boolean;
 }) {
   return (
     <motion.div
@@ -155,7 +158,7 @@ function ProjectCard({
         ))}
       </div>
 
-      <ConnectedAppsRow gmailConnected={gmailConnected} />
+      <ConnectedAppsRow gmailConnected={gmailConnected} slackConnected={slackConnected} />
 
       <div className="mt-1 flex flex-wrap items-center gap-3">
         <Link
@@ -185,6 +188,8 @@ export function ProjectsGrid() {
   const { connection, loading } = useGoogleSheetsConnection();
   const { connection: gmailConnection } = useGmailConnection();
   const gmailConnected = gmailConnection?.status === "connected";
+  const { connection: slackConnection } = useSlackConnection();
+  const slackConnected = slackConnection?.status === "connected";
   const sources = connection?.sources ?? [];
   const projects = groupProjects(sources);
 
@@ -204,7 +209,7 @@ export function ProjectsGrid() {
         <div>
           <p className={`text-gradient-flow ${Z} text-[36px] leading-none font-normal`}>No projects yet</p>
           <p className={`mt-2 ${Z} text-[23px] leading-snug font-normal text-(--flow-ink)/80`}>
-            Connect a Google Sheet and it shows up here as a project — Notion and Slack are coming next.
+            Connect a Google Sheet and it shows up here as a project — Notion is coming next.
           </p>
         </div>
         <Link
@@ -228,6 +233,7 @@ export function ProjectsGrid() {
           accent={accents[i % accents.length]}
           index={i}
           gmailConnected={gmailConnected}
+          slackConnected={slackConnected}
         />
       ))}
     </div>

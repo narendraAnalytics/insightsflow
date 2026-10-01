@@ -13,7 +13,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -32,10 +32,13 @@ class Connection(Base):
     external_account_email: Mapped[str | None] = mapped_column(String(320))
 
     access_token_enc: Mapped[str] = mapped_column(Text)
-    refresh_token_enc: Mapped[str] = mapped_column(Text)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # Null for Slack: a bot token has no refresh token and never expires.
+    refresh_token_enc: Mapped[str | None] = mapped_column(Text)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     scopes: Mapped[str] = mapped_column(String(512))
     key_version: Mapped[str] = mapped_column(String(8))
+    # Provider details that aren't secret. Slack: {team_id, team_name, channel_id, channel_name}.
+    config: Mapped[dict | None] = mapped_column(JSONB)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

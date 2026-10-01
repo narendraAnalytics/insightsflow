@@ -103,9 +103,12 @@ async def get_valid_access_token(session: AsyncSession, connection: Connection) 
     """Returns a currently-valid access token, refreshing via the stored
     refresh token first if the cached one has expired."""
     now = datetime.now(UTC)
-    if connection.expires_at > now:
+    # expires_at is null for tokens that never expire (Slack bot tokens).
+    if connection.expires_at is None or connection.expires_at > now:
         return decrypt_token(connection.access_token_enc, connection.key_version)
 
+    if connection.refresh_token_enc is None:
+        raise NotFoundError(f"The {connection.provider} connection has expired. Reconnect it.")
     refresh_token = decrypt_token(connection.refresh_token_enc, connection.key_version)
     access_token, expires_at = await asyncio.to_thread(
         google_sheets.refresh_access_token, refresh_token, connection.scopes.split(",")

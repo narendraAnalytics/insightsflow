@@ -72,6 +72,14 @@ class Settings(BaseSettings):
     oauth_state_secret: str | None = None
     token_encryption_keys: str | None = None
 
+    # Slack app credentials (api.slack.com/apps -> Basic Information). One Slack
+    # app serves every user; each user installs it into their own workspace.
+    # slack_redirect_uri must exactly match a Redirect URL registered on the app
+    # and must be HTTPS (use the ngrok URL locally).
+    slack_client_id: str | None = None
+    slack_client_secret: str | None = None
+    slack_redirect_uri: str | None = None
+
     # Shared secret for the once-a-minute external pinger that calls
     # POST /api/v1/internal/email/run-due (sends due scheduled emails). Use a
     # long random string (32+ chars). Unset = the endpoint is disabled (503).

@@ -17,8 +17,9 @@ from app.core.security import Principal, get_current_principal
 from app.db.models.connection import Connection
 from app.db.models.data_source import DataSource
 from app.db.session import get_db
+from app.integrations import slack
 from app.integrations.google import gmail as google_gmail
-from app.services import connection_service, data_source_service
+from app.services import connection_service, data_source_service, slack_service
 
 router = APIRouter(prefix="/connections", tags=["connections"])
 
@@ -78,17 +79,24 @@ class DataSourceOut(BaseModel):
 class ConnectionResponse(BaseModel):
     provider: str
     status: str
+    # Gmail: the account's address. Slack: the workspace name.
     external_account_email: str | None
     can_read_mail: bool
+    # Slack only: the default channel for approved posts (None until one is chosen).
+    slack_channel_id: str | None = None
+    slack_channel_name: str | None = None
     sources: list[DataSourceOut]
 
     @classmethod
     def from_model(cls, c: Connection, sources: list[DataSource]) -> "ConnectionResponse":
+        cfg = (c.config or {}) if c.provider == "slack" else {}
         return cls(
             provider=c.provider,
             status=c.status,
             external_account_email=c.external_account_email,
             can_read_mail=c.provider == "gmail" and google_gmail.has_read_scope(c.scopes),
+            slack_channel_id=cfg.get("channel_id"),
+            slack_channel_name=cfg.get("channel_name"),
             sources=[DataSourceOut.from_model(s) for s in sources],
         )
 
@@ -232,3 +240,67 @@ async def gmail_disconnect(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     await connection_service.disconnect(db, principal.user_id, "gmail")
+
+
+class SlackChannelOut(BaseModel):
+    id: str
+    name: str
+
+
+class SetSlackChannelRequest(BaseModel):
+    channel_id: str = Field(pattern=slack.CHANNEL_ID.pattern)
+
+
+class SlackChannelChoice(BaseModel):
+    channel_id: str
+    channel_name: str
+
+
+@router.get("/slack/connect-url", response_model=ConnectUrlResponse)
+async def slack_connect_url(
+    principal: Principal = Depends(get_current_principal),
+) -> ConnectUrlResponse:
+    return ConnectUrlResponse(url=slack_service.start_connect(principal.user_id))
+
+
+@router.get("/slack/callback")
+async def slack_callback(
+    code: str | None = Query(default=None),
+    state: str = Query(...),
+    error: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> RedirectResponse:
+    base = f"{get_settings().frontend_url}/dashboard/integrations"
+    # The user clicked "Cancel" on Slack's install screen (error=access_denied).
+    if error or not code:
+        return RedirectResponse(url=f"{base}?slack_error=denied")
+    clerk_user_id, _ = verify_state(state)
+    await slack_service.complete_connect(db, clerk_user_id, code)
+    return RedirectResponse(url=f"{base}?connected=slack")
+
+
+@router.get("/slack/channels", response_model=list[SlackChannelOut])
+async def slack_channels(
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> list[SlackChannelOut]:
+    channels = await slack_service.list_channels(db, principal.user_id)
+    return [SlackChannelOut(id=c.id, name=c.name) for c in channels]
+
+
+@router.put("/slack/channel", response_model=SlackChannelChoice)
+async def slack_set_channel(
+    body: SetSlackChannelRequest,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> SlackChannelChoice:
+    config = await slack_service.set_channel(db, principal.user_id, body.channel_id)
+    return SlackChannelChoice(channel_id=config["channel_id"], channel_name=config["channel_name"])
+
+
+@router.delete("/slack", status_code=204)
+async def slack_disconnect(
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await slack_service.disconnect(db, principal.user_id)

@@ -14,7 +14,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import AppError
 from app.core.security import Principal, get_current_principal
 from app.db.session import get_db
-from app.services import chat_service, email_service, insights_service, scheduled_email_service
+from app.services import (
+    chat_service,
+    email_service,
+    insights_service,
+    scheduled_email_service,
+    slack_service,
+)
 
 router = APIRouter(prefix="/insights", tags=["insights"])
 
@@ -159,6 +165,33 @@ async def send_email(
         body.body,
     )
     return SendEmailResponse(**sent)
+
+
+class PostSlackRequest(BaseModel):
+    conversation_id: uuid.UUID
+    step_id: str = Field(min_length=1, max_length=200)  # the draft_slack_message call's id
+    channel_id: str = Field(pattern=r"^[CG][A-Z0-9]{2,40}$")
+    text: str = Field(min_length=1, max_length=10000)
+
+
+class PostSlackResponse(BaseModel):
+    status: str
+    sent_at: str
+    channel_name: str
+
+
+@router.post("/slack/send", response_model=PostSlackResponse)
+async def post_slack(
+    body: PostSlackRequest,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> PostSlackResponse:
+    """Posts a Slack draft the user approved on the draft card — the only way anything
+    is posted to Slack."""
+    posted = await slack_service.send_draft(
+        db, principal.user_id, body.conversation_id, body.step_id, body.channel_id, body.text
+    )
+    return PostSlackResponse(**posted)
 
 
 class ScheduleEmailRequest(SendEmailRequest):

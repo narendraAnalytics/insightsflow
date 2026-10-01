@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { GmailCard } from "@/components/dashboard/integrations/gmail-card";
 import { GoogleSheetsCard } from "@/components/dashboard/integrations/google-sheets-card";
+import { SlackCard } from "@/components/dashboard/integrations/slack-card";
 
 export default function IntegrationsPage() {
   return (
@@ -16,6 +17,9 @@ export default function IntegrationsPage() {
         <GoogleSheetsCard />
         <Suspense fallback={null}>
           <GmailCard />
+        </Suspense>
+        <Suspense fallback={null}>
+          <SlackCard />
         </Suspense>
       </div>
     </div>

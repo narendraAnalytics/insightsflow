@@ -53,3 +53,9 @@ services:
         sync: false
       - key: CRON_SECRET # 32+ random chars; also the X-Cron-Secret header on the pinger
         sync: false
+      - key: SLACK_CLIENT_ID # Slack app -> Basic Information -> App Credentials
+        sync: false
+      - key: SLACK_CLIENT_SECRET
+        sync: false
+      - key: SLACK_REDIRECT_URI # must match a Redirect URL registered on the Slack app
+        value: https://insightsflow-zeb7.onrender.com/api/v1/connections/slack/callback

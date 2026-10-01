@@ -28,7 +28,7 @@ from app.db.models.data_source import DataSource
 from app.db.session import get_sessionmaker
 from app.integrations.google import gmail as google_gmail
 from app.integrations.google import sheets as google_sheets
-from app.services import chat_service, connection_service, data_source_service
+from app.services import chat_service, connection_service, data_source_service, slack_service
 
 logger = structlog.get_logger(__name__)
 
@@ -56,6 +56,9 @@ class SheetContext:
     # The same connection also holds the send scope, so the agent may DRAFT emails
     # (it can never send: the user's click on the draft card does that).
     gmail_can_send: bool = False
+    # The user's default Slack channel ({id, name}) when Slack is connected and one is
+    # chosen: lets the agent DRAFT a post (the user's click on the card posts it).
+    slack_channel: dict[str, str] | None = None
 
     @property
     def label(self) -> str:
@@ -129,8 +132,21 @@ async def load_sheet_context(
         tables = dict(zip(_table_names(sources), frames, strict=True))
         truncated = any(len(f) >= MAX_SHEET_ROWS for f in frames)
     return SheetContext(
-        tables=tables, truncated=truncated, gmail_token=gmail_token, gmail_can_send=can_send
+        tables=tables,
+        truncated=truncated,
+        gmail_token=gmail_token,
+        gmail_can_send=can_send,
+        slack_channel=await _slack_channel(session, clerk_user_id),
     )
+
+
+async def _slack_channel(session: AsyncSession, clerk_user_id: str) -> dict[str, str] | None:
+    """Never blocks Q&A: any failure just means the Slack tool isn't offered."""
+    try:
+        return await slack_service.default_channel(session, clerk_user_id)
+    except Exception:
+        logger.warning("slack_channel_unavailable", exc_info=True)
+        return None
 
 
 async def _gmail_access(session: AsyncSession, clerk_user_id: str) -> tuple[str | None, bool]:
@@ -318,10 +334,19 @@ async def stream_answer(
         )
         graph = build_graph(
             llm,
-            build_tools(TableSet(ctx.tables), fetch_emails, can_draft_email=ctx.gmail_can_send),
+            build_tools(
+                TableSet(ctx.tables),
+                fetch_emails,
+                can_draft_email=ctx.gmail_can_send,
+                slack_channel=ctx.slack_channel,
+            ),
         )
         system = build_system_prompt(
-            _table_infos(ctx), ctx.truncated, mail=bool(token), send=ctx.gmail_can_send
+            _table_infos(ctx),
+            ctx.truncated,
+            mail=bool(token),
+            send=ctx.gmail_can_send,
+            slack=bool(ctx.slack_channel),
         )
         messages = [
             SystemMessage(content=system),

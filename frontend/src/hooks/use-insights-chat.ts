@@ -36,8 +36,24 @@ export type EmailDraft = {
 
 export type DraftFields = Pick<EmailDraft, "to" | "subject" | "body">;
 
+/** A Slack message the AI drafted. Nothing is posted until the user clicks Post on the card. */
+export type SlackDraft = {
+  kind: "slack";
+  channel_id: string;
+  channel_name: string;
+  text: string;
+  status: "draft" | "sent";
+  sent_at?: string;
+};
+
+export type Draft = EmailDraft | SlackDraft;
+
+export const isSlackDraft = (d: Draft): d is SlackDraft => "kind" in d && d.kind === "slack";
+
 /** What the draft card can do — each one is the user's own click (the approval step). */
 export type DraftActions = {
+  /** Posts the (possibly edited) message to `channelId`. */
+  postSlack: (stepId: string, channelId: string, text: string) => Promise<void>;
   send: (stepId: string, fields: DraftFields) => Promise<void>;
   schedule: (stepId: string, fields: DraftFields, sendAtIso: string) => Promise<void>;
   cancel: (stepId: string, scheduledId: string) => Promise<void>;
@@ -52,7 +68,7 @@ export type Step = {
   table?: ResultTable | null;
   headline?: Headline | null;
   emails?: EmailItem[] | null;
-  draft?: EmailDraft | null;
+  draft?: Draft | null;
 };
 
 export type ChatMessage = {
@@ -317,7 +333,7 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[], gmailRe
     [busy, sourceIds, useGmail, getToken, patchAssistant, refreshConversations]
   );
 
-  const setStepDraft = useCallback((stepId: string, draft: EmailDraft) => {
+  const setStepDraft = useCallback((stepId: string, draft: Draft) => {
     setMessages((prev) =>
       prev.map((m) => ({
         ...m,
@@ -330,6 +346,25 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[], gmailRe
   // failure so the card can show it. Each is the user's own click on the card.
   const draftActions = useMemo<DraftActions>(
     () => ({
+      /** Posts a Slack draft now. */
+      postSlack: async (stepId, channelId, text) => {
+        const conversation = conversationIdRef.current;
+        if (!conversation) throw new Error("Open the chat again to post this message.");
+        const token = await getToken();
+        const res = await apiFetch<{ status: string; sent_at: string; channel_name: string }>(
+          "/api/v1/insights/slack/send",
+          token,
+          { method: "POST", body: { conversation_id: conversation, step_id: stepId, channel_id: channelId, text } }
+        );
+        setStepDraft(stepId, {
+          kind: "slack",
+          channel_id: channelId,
+          channel_name: res.channel_name,
+          text,
+          status: "sent",
+          sent_at: res.sent_at,
+        });
+      },
       /** Sends now. */
       send: async (stepId, fields) => {
         const conversation = conversationIdRef.current;
@@ -364,7 +399,7 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[], gmailRe
           prev.map((m) => ({
             ...m,
             steps: m.steps.map((s) =>
-              s.id === stepId && s.draft
+              s.id === stepId && s.draft && !isSlackDraft(s.draft)
                 ? { ...s, draft: { to: s.draft.to, subject: s.draft.subject, body: s.draft.body, status: "draft" } }
                 : s
             ),
@@ -384,7 +419,7 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[], gmailRe
       try {
         const token = await getToken();
         const detail = await apiFetch<ConversationDetail>(`/api/v1/insights/conversations/${conversationId}`, token);
-        const fresh = new Map<string, EmailDraft>();
+        const fresh = new Map<string, Draft>();
         for (const m of detail.messages) for (const s of m.steps) if (s.draft) fresh.set(s.id, s.draft);
         setMessages((prev) =>
           prev.map((m) => ({

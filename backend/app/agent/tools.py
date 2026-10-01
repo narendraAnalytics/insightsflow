@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from app.agent.numbers import number_to_words
 from app.core.errors import AppError
 from app.integrations.google.gmail import clean_body, clean_subject, parse_recipient
+from app.integrations.slack import clean_message as slack_clean_message
 
 MAX_ROWS_RETURNED = 20
 Op = Literal["sum", "mean", "median", "min", "max", "count"]
@@ -277,15 +278,34 @@ def build_tools(
     tables: TableSet | pd.DataFrame,
     fetch_emails: Callable[[int], list[dict[str, Any]]] | None = None,
     can_draft_email: bool = False,
+    slack_channel: dict[str, str] | None = None,
 ) -> list[BaseTool]:
     """Tools closed over one request's tables. A bare DataFrame is accepted for
     the single-sheet case and becomes a one-table set named 'sheet'.
     `fetch_emails(count)` (rows of sender/subject/date) enables `recent_emails`
     — it is only passed when the user's Gmail connection may read mail.
     `can_draft_email` enables `draft_email`, which never sends: it only returns a
-    draft for the user to review and send from the UI."""
+    draft for the user to review and send from the UI.
+    `slack_channel` ({id, name}, the user's default channel) enables
+    `draft_slack_message`, which likewise only drafts — the user's click posts it."""
     if isinstance(tables, pd.DataFrame):
         tables = TableSet({"sheet": tables})
+
+    def draft_slack_message(text: str) -> str:
+        assert slack_channel is not None
+        text = slack_clean_message(re.split(r"<[a-zA-Z/!]", text, maxsplit=1)[0])
+        if not text:
+            return _err("A Slack message can't be empty")
+        return _ok(
+            "Slack message drafted and shown to the user to review. It has NOT been posted.",
+            draft={
+                "kind": "slack",
+                "channel_id": slack_channel["id"],
+                "channel_name": slack_channel["name"],
+                "text": text,
+                "status": "draft",
+            },
+        )
 
     def draft_email(subject: str, body: str, to: str = "") -> str:
         # Sarvam once trailed a body with runaway HTML (`</span></div>…`). Emails here are
@@ -485,7 +505,21 @@ def build_tools(
             )
         )
 
-    if not tables.tables:  # an email-only chat has no sheet tools to offer
+    if slack_channel:
+        mail_tools.append(
+            StructuredTool.from_function(
+                draft_slack_message,
+                name="draft_slack_message",
+                description=(
+                    "Prepare a short Slack message for the user to review and post "
+                    "themselves; this does NOT post anything. Use only numbers from "
+                    "earlier tool results. Plain text, a few short lines, no markdown "
+                    "headings. The channel is the user's default and is fixed."
+                ),
+            )
+        )
+
+    if not tables.tables:  # a chat with no sheet has no analysis tools to offer
         return mail_tools
 
     return [
@@ -544,6 +578,8 @@ def tool_label(name: str, args: dict[str, Any]) -> str:
         return f"Reading your {args.get('count', 5)} latest emails"
     if name == "draft_email":
         return "Drafting your email"
+    if name == "draft_slack_message":
+        return "Drafting your Slack message"
     if name == "describe_sheet":
         return "Reading the sheet structure"
     if name == "join_tables":

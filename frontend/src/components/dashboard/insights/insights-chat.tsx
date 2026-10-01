@@ -21,9 +21,11 @@ import { GmailGlyph } from "@/components/site/brand-icons";
 import { useGmailConnection } from "@/hooks/use-gmail-connection";
 import { sourceLabel, useGoogleSheetsConnection, type DataSource } from "@/hooks/use-google-sheets-connection";
 import {
+  isSlackDraft,
   useInsightsChat,
   type ChatMessage,
   type ConversationSummary,
+  type Draft,
   type DraftActions,
   type Headline,
   type Step,
@@ -31,6 +33,7 @@ import {
 } from "@/hooks/use-insights-chat";
 import { EmailCard, TableCard, ValueCard } from "@/components/dashboard/insights/result-card";
 import { EmailDraftCard } from "@/components/dashboard/insights/email-draft-card";
+import { SlackDraftCard } from "@/components/dashboard/insights/slack-draft-card";
 
 // Deep, bright accents (no blue/violet) — used to tell suggestion chips apart.
 const chipAccents = [
@@ -141,6 +144,8 @@ function StepChip({ step }: { step: Step }) {
   );
 }
 
+const scheduledIdOf = (d: Draft | null | undefined) => (d && !isSlackDraft(d) ? (d.scheduled_id ?? "") : "");
+
 function AssistantMessage({
   message,
   draftActions,
@@ -179,13 +184,19 @@ function AssistantMessage({
         )}
 
         {cards.map((s) =>
-          s.draft ? (
+          s.draft && isSlackDraft(s.draft) ? (
+            <SlackDraftCard
+              key={s.id}
+              draft={s.draft}
+              onPost={(channelId, text) => draftActions.postSlack(s.id, channelId, text)}
+            />
+          ) : s.draft ? (
             <EmailDraftCard
               key={s.id}
               draft={s.draft}
               onSend={(fields) => draftActions.send(s.id, fields)}
               onSchedule={(fields, sendAtIso) => draftActions.schedule(s.id, fields, sendAtIso)}
-              onCancelSchedule={() => draftActions.cancel(s.id, s.draft?.scheduled_id ?? "")}
+              onCancelSchedule={() => draftActions.cancel(s.id, scheduledIdOf(s.draft))}
             />
           ) : s.emails?.length ? (
             <EmailCard key={s.id} emails={s.emails} />
