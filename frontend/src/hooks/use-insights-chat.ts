@@ -21,6 +21,15 @@ export type EmailItem = {
 
 export type Headline = { label: string | null; value: number; words: string };
 
+/** An email the AI drafted. Nothing is sent until the user clicks Send on the card. */
+export type EmailDraft = {
+  to: string;
+  subject: string;
+  body: string;
+  status: "draft" | "sent";
+  sent_at?: string;
+};
+
 export type Step = {
   id: string;
   label: string;
@@ -30,6 +39,7 @@ export type Step = {
   table?: ResultTable | null;
   headline?: Headline | null;
   emails?: EmailItem[] | null;
+  draft?: EmailDraft | null;
 };
 
 export type ChatMessage = {
@@ -258,6 +268,7 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[], gmailRe
                         table: d.table,
                         headline: d.headline,
                         emails: d.emails,
+                        draft: d.draft,
                       }
                     : s
                 ),
@@ -291,6 +302,28 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[], gmailRe
       }
     },
     [busy, sourceIds, useGmail, getToken, patchAssistant, refreshConversations]
+  );
+
+  /** Sends a draft the user approved (their final, possibly edited text). Throws an
+   * ApiError with the server's own message on failure so the card can show it. */
+  const sendDraft = useCallback(
+    async (stepId: string, fields: Pick<EmailDraft, "to" | "subject" | "body">) => {
+      const conversation = conversationIdRef.current;
+      if (!conversation) throw new Error("Open the chat again to send this email.");
+      const token = await getToken();
+      const res = await apiFetch<{ status: string; sent_at: string }>("/api/v1/insights/email/send", token, {
+        method: "POST",
+        body: { conversation_id: conversation, step_id: stepId, ...fields },
+      });
+      const sent: EmailDraft = { ...fields, status: "sent", sent_at: res.sent_at };
+      setMessages((prev) =>
+        prev.map((m) => ({
+          ...m,
+          steps: m.steps.map((s) => (s.id === stepId ? { ...s, draft: sent } : s)),
+        }))
+      );
+    },
+    [getToken]
   );
 
   const stop = useCallback(() => abortRef.current?.abort(), []);
@@ -348,6 +381,7 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[], gmailRe
     setUseGmail,
     sourceRemoved: conversationId !== null && sourceIds.length === 0 && !useGmail,
     send,
+    sendDraft,
     stop,
     newChat,
     openConversation,

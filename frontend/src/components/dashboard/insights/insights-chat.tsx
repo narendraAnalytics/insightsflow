@@ -24,11 +24,13 @@ import {
   useInsightsChat,
   type ChatMessage,
   type ConversationSummary,
+  type EmailDraft,
   type Headline,
   type Step,
   MAX_SOURCES_PER_CHAT,
 } from "@/hooks/use-insights-chat";
 import { EmailCard, TableCard, ValueCard } from "@/components/dashboard/insights/result-card";
+import { EmailDraftCard } from "@/components/dashboard/insights/email-draft-card";
 
 // Deep, bright accents (no blue/violet) — used to tell suggestion chips apart.
 const chipAccents = [
@@ -139,9 +141,15 @@ function StepChip({ step }: { step: Step }) {
   );
 }
 
-function AssistantMessage({ message }: { message: ChatMessage }) {
+function AssistantMessage({
+  message,
+  onSendDraft,
+}: {
+  message: ChatMessage;
+  onSendDraft: (stepId: string, fields: Pick<EmailDraft, "to" | "subject" | "body">) => Promise<void>;
+}) {
   const cards = message.steps.filter(
-    (s) => s.status === "done" && (s.table || s.emails?.length || typeof s.value === "number")
+    (s) => s.status === "done" && (s.draft || s.table || s.emails?.length || typeof s.value === "number")
   );
   const lastStep = message.steps[message.steps.length - 1];
   const headline: Headline | null =
@@ -171,7 +179,9 @@ function AssistantMessage({ message }: { message: ChatMessage }) {
         )}
 
         {cards.map((s) =>
-          s.emails?.length ? (
+          s.draft ? (
+            <EmailDraftCard key={s.id} draft={s.draft} onSend={(fields) => onSendDraft(s.id, fields)} />
+          ) : s.emails?.length ? (
             <EmailCard key={s.id} emails={s.emails} />
           ) : s.table ? (
             <TableCard key={s.id} table={s.table} />
@@ -482,6 +492,7 @@ export function InsightsChat() {
     setUseGmail,
     sourceRemoved,
     send,
+    sendDraft,
     stop,
     newChat,
     openConversation,
@@ -662,7 +673,7 @@ export function InsightsChat() {
         ) : (
           <>
             {messages.map((m) =>
-              m.role === "user" ? <UserMessage key={m.id} message={m} /> : <AssistantMessage key={m.id} message={m} />
+              m.role === "user" ? <UserMessage key={m.id} message={m} /> : <AssistantMessage key={m.id} message={m} onSendDraft={sendDraft} />
             )}
           </>
         )}
