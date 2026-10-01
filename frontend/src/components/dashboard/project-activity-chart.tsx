@@ -1,6 +1,6 @@
 "use client";
 
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis } from "recharts";
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartLineUp } from "@phosphor-icons/react";
 import { useDashboardSummary } from "@/hooks/use-dashboard-stats";
 
@@ -10,15 +10,29 @@ const SERIES = [
   { key: "chats", label: "Questions", color: "var(--flow-magenta)" },
 ] as const;
 
-function weekdayLabel(iso: string) {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
+// The API sends plain IST calendar dates ("2026-10-01"); read them as UTC midnight so the
+// browser's own timezone can never shift the day.
+const dayOf = (iso: string) => new Date(`${iso}T00:00:00Z`);
+
+/** Axis label: weekday + day of month ("Fri 25"), so it's clear which week each day is in. */
+function axisLabel(iso: string) {
+  const weekday = dayOf(iso).toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
+  return `${weekday} ${dayOf(iso).getUTCDate()}`;
 }
 
-function TooltipCard({ active, payload, label }: { active?: boolean; payload?: { dataKey: string; value: number }[]; label?: string }) {
+/** Tooltip title: "Thu 1 Oct", with "· Today" on the newest day. */
+function fullLabel(iso: string, isToday: boolean) {
+  const text = dayOf(iso).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+  return isToday ? `${text} · Today` : text;
+}
+
+type Point = { full: string };
+
+function TooltipCard({ active, payload }: { active?: boolean; payload?: { dataKey: string; value: number; payload: Point }[] }) {
   if (!active || !payload?.length) return null;
   return (
     <div className="glass-panel rounded-xl px-3 py-2 font-(family-name:--font-zeyada) text-[19px] leading-snug font-normal text-(--flow-ink)">
-      <p className="text-[17px] text-(--flow-ink)/60">{label}</p>
+      <p className="text-[17px] text-(--flow-ink)/60">{payload[0].payload.full}</p>
       {SERIES.map((s) => {
         const entry = payload.find((p) => p.dataKey === s.key);
         if (!entry || entry.value === 0) return null;
@@ -38,8 +52,9 @@ export function ProjectActivityChart() {
   const days = summary?.daily_activity ?? [];
   const hasActivity = days.some((d) => d.connections + d.sources + d.chats > 0);
 
-  const data = days.map((d) => ({
-    label: weekdayLabel(d.date),
+  const data = days.map((d, i) => ({
+    label: axisLabel(d.date),
+    full: fullLabel(d.date, i === days.length - 1), // the API's newest day is today (IST)
     connections: d.connections,
     sources: d.sources,
     chats: d.chats,
@@ -93,6 +108,8 @@ export function ProjectActivityChart() {
                   interval={0}
                   padding={{ left: 18, right: 18 }}
                 />
+                {/* Scale is at least 0-10 so a few events never fill the whole height. */}
+                <YAxis hide domain={[0, (max: number) => Math.max(10, max)]} />
                 <Tooltip content={<TooltipCard />} cursor={{ stroke: "var(--flow-ink)", strokeOpacity: 0.15 }} />
                 {SERIES.map((s) => (
                   <Area
