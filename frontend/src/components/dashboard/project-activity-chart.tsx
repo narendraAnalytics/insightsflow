@@ -95,7 +95,8 @@ export function ProjectActivityChart() {
                     key={s.key}
                     type="monotone"
                     dataKey={s.key}
-                    stackId="activity"
+                    // Connections is a running total, so it must not be stacked on the daily counts.
+                    stackId={s.key === "connections" ? "connections" : "activity"}
                     stroke={s.color}
                     strokeWidth={2}
                     fill={`url(#activity-${s.key})`}

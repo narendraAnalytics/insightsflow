@@ -10,8 +10,17 @@ export type DashboardSummary = {
     connected_sheets: number;
     connected_tabs: number;
     questions_asked: number;
+    /** Connected providers, oldest first, e.g. ["google_sheets", "gmail"]. */
+    connected_providers: string[];
   };
-  activity: { kind: "connection" | "source" | "chat"; title: string; detail: string | null; at: string }[];
+  activity: {
+    kind: "connection" | "source" | "chat";
+    title: string;
+    detail: string | null;
+    at: string;
+    /** For connection events: google_sheets | gmail. */
+    provider?: string | null;
+  }[];
   sources: { id: string; name: string; tab_title: string; row_count: number; synced_at: string }[];
   daily_activity: { date: string; connections: number; sources: number; chats: number }[];
 };

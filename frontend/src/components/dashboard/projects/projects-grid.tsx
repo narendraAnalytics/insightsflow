@@ -1,9 +1,11 @@
 "use client";
 
+import type { ReactElement, SVGProps } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ChatCircleText, FolderOpen, Plug, Plus, Stack } from "@phosphor-icons/react";
-import { GoogleSheetsGlyph } from "@/components/site/brand-icons";
+import { GmailGlyph, GoogleSheetsGlyph } from "@/components/site/brand-icons";
+import { useGmailConnection } from "@/hooks/use-gmail-connection";
 import { sourceLabel, useGoogleSheetsConnection, type DataSource } from "@/hooks/use-google-sheets-connection";
 
 const Z = "font-(family-name:--font-zeyada)";
@@ -43,19 +45,31 @@ function groupProjects(sources: DataSource[]): Project[] {
   }));
 }
 
-/** The apps a project can be built from. Google Sheets is live; the rest are
- * placeholders so the "more apps soon" promise stays visible without faking data. */
-const APP_CHIPS: { label: string; live: boolean }[] = [
-  { label: "Google Sheets", live: true },
-  { label: "Notion", live: false },
-  { label: "Slack", live: false },
-];
+type AppChip = {
+  label: string;
+  live: boolean;
+  Glyph?: (props: SVGProps<SVGSVGElement>) => ReactElement;
+  /** Shown after the label when not live ("soon" for unbuilt apps, "not connected" for Gmail). */
+  note?: string;
+};
 
-function ConnectedAppsRow() {
+/** The apps shown on a project. Google Sheets (the project's own source) and Gmail reflect
+ * the real connection; Notion and Slack are placeholders so the "more apps soon" promise
+ * stays visible without faking data. */
+function appChips(gmailConnected: boolean): AppChip[] {
+  return [
+    { label: "Google Sheets", live: true, Glyph: GoogleSheetsGlyph },
+    { label: "Gmail", live: gmailConnected, Glyph: GmailGlyph, note: "not connected" },
+    { label: "Notion", live: false, note: "soon" },
+    { label: "Slack", live: false, note: "soon" },
+  ];
+}
+
+function ConnectedAppsRow({ gmailConnected }: { gmailConnected: boolean }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span className={`${Z} text-[20px] leading-none font-normal text-(--flow-ink)/70`}>Connected apps</span>
-      {APP_CHIPS.map((app) => (
+      {appChips(gmailConnected).map((app) => (
         <span
           key={app.label}
           className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 ${Z} text-[19px] leading-none font-normal ${
@@ -64,16 +78,30 @@ function ConnectedAppsRow() {
               : "bg-(--flow-ink)/6 text-(--flow-ink)/40"
           }`}
         >
-          {app.live && <span className="size-1.5 rounded-full bg-(--flow-cyan)" />}
+          {app.Glyph ? (
+            <app.Glyph aria-hidden className={`size-4 shrink-0 ${app.live ? "" : "opacity-45 grayscale"}`} />
+          ) : (
+            app.live && <span className="size-1.5 rounded-full bg-(--flow-cyan)" />
+          )}
           {app.label}
-          {!app.live && <span className="text-[15px]">· soon</span>}
+          {!app.live && app.note && <span className="text-[15px]">· {app.note}</span>}
         </span>
       ))}
     </div>
   );
 }
 
-function ProjectCard({ project, accent, index }: { project: Project; accent: string; index: number }) {
+function ProjectCard({
+  project,
+  accent,
+  index,
+  gmailConnected,
+}: {
+  project: Project;
+  accent: string;
+  index: number;
+  gmailConnected: boolean;
+}) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 14 }}
@@ -127,7 +155,7 @@ function ProjectCard({ project, accent, index }: { project: Project; accent: str
         ))}
       </div>
 
-      <ConnectedAppsRow />
+      <ConnectedAppsRow gmailConnected={gmailConnected} />
 
       <div className="mt-1 flex flex-wrap items-center gap-3">
         <Link
@@ -155,6 +183,8 @@ function ProjectCard({ project, accent, index }: { project: Project; accent: str
 
 export function ProjectsGrid() {
   const { connection, loading } = useGoogleSheetsConnection();
+  const { connection: gmailConnection } = useGmailConnection();
+  const gmailConnected = gmailConnection?.status === "connected";
   const sources = connection?.sources ?? [];
   const projects = groupProjects(sources);
 
@@ -192,7 +222,13 @@ export function ProjectsGrid() {
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 xl:grid-cols-3">
       {projects.map((project, i) => (
-        <ProjectCard key={project.spreadsheetId} project={project} accent={accents[i % accents.length]} index={i} />
+        <ProjectCard
+          key={project.spreadsheetId}
+          project={project}
+          accent={accents[i % accents.length]}
+          index={i}
+          gmailConnected={gmailConnected}
+        />
       ))}
     </div>
   );

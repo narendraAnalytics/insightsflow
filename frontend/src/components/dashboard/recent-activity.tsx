@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FileXls, Plug } from "@phosphor-icons/react";
+import { GmailGlyph } from "@/components/site/brand-icons";
 import { useDashboardSummary } from "@/hooks/use-dashboard-stats";
 
 function timeAgo(iso: string) {
@@ -14,8 +15,8 @@ function timeAgo(iso: string) {
   return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
-// Shows only what's connected (one row per integration). Google Sheets is the
-// only provider today; other apps will appear here once they can be connected.
+// Shows only what's connected (one row per integration): Google Sheets and Gmail
+// today, each with its own icon; other apps will appear here once they can be connected.
 export function RecentActivity() {
   const { summary } = useDashboardSummary();
   const connected = (summary?.activity ?? []).filter((e) => e.kind === "connection");
@@ -42,9 +43,15 @@ export function RecentActivity() {
         <ul className="mt-4 flex flex-col gap-4">
           {connected.map((e, i) => (
             <li key={`${e.at}-${i}`} className="flex items-center gap-3">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#0f9d58]/12">
-                <FileXls weight="fill" className="size-5 text-[#0f9d58]" />
-              </span>
+              {e.provider === "gmail" ? (
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#ea4335]/10">
+                  <GmailGlyph role="img" aria-label="Gmail" className="size-6" />
+                </span>
+              ) : (
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#0f9d58]/12">
+                  <FileXls weight="fill" className="size-5 text-[#0f9d58]" />
+                </span>
+              )}
               <div className="min-w-0 flex-1">
                 <p className="text-[21px] font-(family-name:--font-zeyada) leading-none font-normal text-(--flow-ink)">{e.title}</p>
                 <p className="truncate text-[18px] font-(family-name:--font-zeyada) leading-none font-normal text-(--flow-ink)/50">

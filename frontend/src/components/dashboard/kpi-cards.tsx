@@ -1,14 +1,33 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactElement, type SVGProps } from "react";
 import Link from "next/link";
 import { animate, motion, useReducedMotion } from "framer-motion";
 import { ArrowUpRight, ChatsCircle, FileXls, Plug, Table } from "@phosphor-icons/react";
+import { GmailGlyph, GoogleSheetsGlyph } from "@/components/site/brand-icons";
 import { useDashboardSummary } from "@/hooks/use-dashboard-stats";
 
 type Summary = NonNullable<ReturnType<typeof useDashboardSummary>["summary"]>;
 
-const kpiConfig = [
+/** Brand icon + name for each provider a connection can have. Unknown ones fall back to a plug. */
+const PROVIDER_ICONS: Record<string, { label: string; Glyph: (props: SVGProps<SVGSVGElement>) => ReactElement }> = {
+  google_sheets: { label: "Google Sheets", Glyph: GoogleSheetsGlyph },
+  gmail: { label: "Gmail", Glyph: GmailGlyph },
+};
+
+type KpiConfig = {
+  label: string;
+  icon: typeof Plug;
+  image: string;
+  accent: string;
+  href: string;
+  value: (s: Summary) => number;
+  note: (s: Summary) => string;
+  /** When set and non-empty, the pill shows these providers' icons instead of `note`. */
+  providers?: (s: Summary) => string[];
+};
+
+const kpiConfig: KpiConfig[] = [
   {
     label: "Connected Sheets",
     icon: FileXls,
@@ -26,7 +45,9 @@ const kpiConfig = [
     accent: "var(--flow-cyan)",
     href: "/dashboard/integrations",
     value: (s: Summary) => s.stats.active_integrations,
-    note: (s: Summary) => (s.stats.active_integrations ? "Google Sheets" : "Connect Google →"),
+    // Shown as brand icons (see `providers`) when anything is connected.
+    note: () => "Connect Google →",
+    providers: (s: Summary) => s.stats.connected_providers,
   },
   {
     label: "Questions Asked",
@@ -73,7 +94,7 @@ function KpiCard({
   isLoading,
   reduce,
 }: {
-  kpi: (typeof kpiConfig)[number];
+  kpi: KpiConfig;
   index: number;
   summary: Summary | null | undefined;
   isLoading: boolean;
@@ -92,6 +113,7 @@ function KpiCard({
 
   const value = summary ? kpi.value(summary) : 0;
   const live = value > 0;
+  const providers = summary && kpi.providers ? kpi.providers(summary) : [];
 
   return (
     <motion.div
@@ -171,9 +193,22 @@ function KpiCard({
               style={{ backgroundColor: kpi.accent, opacity: live ? 1 : 0.4 }}
             />
           </span>
-          <span className="font-(family-name:--font-zeyada) text-[18px] leading-none font-normal text-(--flow-ink)/90">
-            {summary ? kpi.note(summary) : "Loading…"}
-          </span>
+          {providers.length > 0 ? (
+            <span className="flex items-center gap-1.5">
+              {providers.map((p) => {
+                const known = PROVIDER_ICONS[p];
+                return known ? (
+                  <known.Glyph key={p} role="img" aria-label={known.label} className="size-5 drop-shadow-sm" />
+                ) : (
+                  <Plug key={p} role="img" aria-label={p} weight="duotone" className="size-5 text-(--flow-ink)/70" />
+                );
+              })}
+            </span>
+          ) : (
+            <span className="font-(family-name:--font-zeyada) text-[18px] leading-none font-normal text-(--flow-ink)/90">
+              {summary ? kpi.note(summary) : "Loading…"}
+            </span>
+          )}
         </span>
 
         {/* accent line that grows on hover */}
