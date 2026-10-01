@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { apiFetch } from "@/lib/api";
 import type { DataSource } from "@/hooks/use-google-sheets-connection";
@@ -26,8 +26,21 @@ export type EmailDraft = {
   to: string;
   subject: string;
   body: string;
-  status: "draft" | "sent";
+  /** draft = editable; scheduled = waiting for send_at; failed = the scheduled send didn't go out. */
+  status: "draft" | "scheduled" | "sent" | "failed";
   sent_at?: string;
+  send_at?: string;
+  scheduled_id?: string;
+  error?: string;
+};
+
+export type DraftFields = Pick<EmailDraft, "to" | "subject" | "body">;
+
+/** What the draft card can do — each one is the user's own click (the approval step). */
+export type DraftActions = {
+  send: (stepId: string, fields: DraftFields) => Promise<void>;
+  schedule: (stepId: string, fields: DraftFields, sendAtIso: string) => Promise<void>;
+  cancel: (stepId: string, scheduledId: string) => Promise<void>;
 };
 
 export type Step = {
@@ -304,27 +317,90 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[], gmailRe
     [busy, sourceIds, useGmail, getToken, patchAssistant, refreshConversations]
   );
 
-  /** Sends a draft the user approved (their final, possibly edited text). Throws an
-   * ApiError with the server's own message on failure so the card can show it. */
-  const sendDraft = useCallback(
-    async (stepId: string, fields: Pick<EmailDraft, "to" | "subject" | "body">) => {
-      const conversation = conversationIdRef.current;
-      if (!conversation) throw new Error("Open the chat again to send this email.");
-      const token = await getToken();
-      const res = await apiFetch<{ status: string; sent_at: string }>("/api/v1/insights/email/send", token, {
-        method: "POST",
-        body: { conversation_id: conversation, step_id: stepId, ...fields },
-      });
-      const sent: EmailDraft = { ...fields, status: "sent", sent_at: res.sent_at };
-      setMessages((prev) =>
-        prev.map((m) => ({
-          ...m,
-          steps: m.steps.map((s) => (s.id === stepId ? { ...s, draft: sent } : s)),
-        }))
-      );
-    },
-    [getToken]
+  const setStepDraft = useCallback((stepId: string, draft: EmailDraft) => {
+    setMessages((prev) =>
+      prev.map((m) => ({
+        ...m,
+        steps: m.steps.map((s) => (s.id === stepId ? { ...s, draft } : s)),
+      }))
+    );
+  }, []);
+
+  // The three draft actions below throw an ApiError with the server's own message on
+  // failure so the card can show it. Each is the user's own click on the card.
+  const draftActions = useMemo<DraftActions>(
+    () => ({
+      /** Sends now. */
+      send: async (stepId, fields) => {
+        const conversation = conversationIdRef.current;
+        if (!conversation) throw new Error("Open the chat again to send this email.");
+        const token = await getToken();
+        const res = await apiFetch<{ status: string; sent_at: string }>("/api/v1/insights/email/send", token, {
+          method: "POST",
+          body: { conversation_id: conversation, step_id: stepId, ...fields },
+        });
+        setStepDraft(stepId, { ...fields, status: "sent", sent_at: res.sent_at });
+      },
+      /** Approves sending later; `sendAtIso` carries its UTC offset (IST = +05:30). */
+      schedule: async (stepId, fields, sendAtIso) => {
+        const conversation = conversationIdRef.current;
+        if (!conversation) throw new Error("Open the chat again to schedule this email.");
+        const token = await getToken();
+        const res = await apiFetch<{ id: string; status: string; send_at: string }>(
+          "/api/v1/insights/email/schedule",
+          token,
+          {
+            method: "POST",
+            body: { conversation_id: conversation, step_id: stepId, ...fields, send_at: sendAtIso },
+          }
+        );
+        setStepDraft(stepId, { ...fields, status: "scheduled", scheduled_id: res.id, send_at: res.send_at });
+      },
+      /** Cancels a waiting email; the card becomes an editable draft again. */
+      cancel: async (stepId, scheduledId) => {
+        const token = await getToken();
+        await apiFetch<void>(`/api/v1/insights/email/schedule/${scheduledId}/cancel`, token, { method: "POST" });
+        setMessages((prev) =>
+          prev.map((m) => ({
+            ...m,
+            steps: m.steps.map((s) =>
+              s.id === stepId && s.draft
+                ? { ...s, draft: { to: s.draft.to, subject: s.draft.subject, body: s.draft.body, status: "draft" } }
+                : s
+            ),
+          }))
+        );
+      },
+    }),
+    [getToken, setStepDraft]
   );
+
+  // A scheduled email is sent by the server, not by this tab — so while one is waiting,
+  // re-read the chat now and then and update only the draft cards (never the answers).
+  const hasScheduled = messages.some((m) => m.steps.some((s) => s.draft?.status === "scheduled"));
+  useEffect(() => {
+    if (!hasScheduled || !conversationId || busy) return;
+    const timer = setInterval(async () => {
+      try {
+        const token = await getToken();
+        const detail = await apiFetch<ConversationDetail>(`/api/v1/insights/conversations/${conversationId}`, token);
+        const fresh = new Map<string, EmailDraft>();
+        for (const m of detail.messages) for (const s of m.steps) if (s.draft) fresh.set(s.id, s.draft);
+        setMessages((prev) =>
+          prev.map((m) => ({
+            ...m,
+            steps: m.steps.map((s) => {
+              const next = s.draft?.status === "scheduled" ? fresh.get(s.id) : undefined;
+              return next && next.status !== "scheduled" ? { ...s, draft: next } : s;
+            }),
+          }))
+        );
+      } catch {
+        /* a missed poll is fine — the next one catches up */
+      }
+    }, 30_000);
+    return () => clearInterval(timer);
+  }, [hasScheduled, conversationId, busy, getToken]);
 
   const stop = useCallback(() => abortRef.current?.abort(), []);
   const newChat = useCallback(() => {
@@ -381,7 +457,7 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[], gmailRe
     setUseGmail,
     sourceRemoved: conversationId !== null && sourceIds.length === 0 && !useGmail,
     send,
-    sendDraft,
+    draftActions,
     stop,
     newChat,
     openConversation,

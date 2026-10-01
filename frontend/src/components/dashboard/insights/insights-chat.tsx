@@ -24,7 +24,7 @@ import {
   useInsightsChat,
   type ChatMessage,
   type ConversationSummary,
-  type EmailDraft,
+  type DraftActions,
   type Headline,
   type Step,
   MAX_SOURCES_PER_CHAT,
@@ -143,10 +143,10 @@ function StepChip({ step }: { step: Step }) {
 
 function AssistantMessage({
   message,
-  onSendDraft,
+  draftActions,
 }: {
   message: ChatMessage;
-  onSendDraft: (stepId: string, fields: Pick<EmailDraft, "to" | "subject" | "body">) => Promise<void>;
+  draftActions: DraftActions;
 }) {
   const cards = message.steps.filter(
     (s) => s.status === "done" && (s.draft || s.table || s.emails?.length || typeof s.value === "number")
@@ -180,7 +180,13 @@ function AssistantMessage({
 
         {cards.map((s) =>
           s.draft ? (
-            <EmailDraftCard key={s.id} draft={s.draft} onSend={(fields) => onSendDraft(s.id, fields)} />
+            <EmailDraftCard
+              key={s.id}
+              draft={s.draft}
+              onSend={(fields) => draftActions.send(s.id, fields)}
+              onSchedule={(fields, sendAtIso) => draftActions.schedule(s.id, fields, sendAtIso)}
+              onCancelSchedule={() => draftActions.cancel(s.id, s.draft?.scheduled_id ?? "")}
+            />
           ) : s.emails?.length ? (
             <EmailCard key={s.id} emails={s.emails} />
           ) : s.table ? (
@@ -492,7 +498,7 @@ export function InsightsChat() {
     setUseGmail,
     sourceRemoved,
     send,
-    sendDraft,
+    draftActions,
     stop,
     newChat,
     openConversation,
@@ -673,7 +679,7 @@ export function InsightsChat() {
         ) : (
           <>
             {messages.map((m) =>
-              m.role === "user" ? <UserMessage key={m.id} message={m} /> : <AssistantMessage key={m.id} message={m} onSendDraft={sendDraft} />
+              m.role === "user" ? <UserMessage key={m.id} message={m} /> : <AssistantMessage key={m.id} message={m} draftActions={draftActions} />
             )}
           </>
         )}
