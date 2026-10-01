@@ -121,7 +121,9 @@ async def recent_activity(db: AsyncSession, user_id: uuid.UUID) -> list[Activity
             .limit(ACTIVITY_LIMIT)
         )
     ).scalars():
-        app_name = {"gmail": "Gmail", "slack": "Slack"}.get(c.provider, "Google Sheets")
+        app_name = {"gmail": "Gmail", "slack": "Slack", "notion": "Notion"}.get(
+            c.provider, "Google Sheets"
+        )
         events.append(
             ActivityEvent(
                 "connection",

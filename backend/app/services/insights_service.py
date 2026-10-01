@@ -28,7 +28,13 @@ from app.db.models.data_source import DataSource
 from app.db.session import get_sessionmaker
 from app.integrations.google import gmail as google_gmail
 from app.integrations.google import sheets as google_sheets
-from app.services import chat_service, connection_service, data_source_service, slack_service
+from app.services import (
+    chat_service,
+    connection_service,
+    data_source_service,
+    notion_service,
+    slack_service,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -59,6 +65,8 @@ class SheetContext:
     # The user's default Slack channel ({id, name}) when Slack is connected and one is
     # chosen: lets the agent DRAFT a post (the user's click on the card posts it).
     slack_channel: dict[str, str] | None = None
+    # The user's chosen Notion parent page ({id, title}); lets the agent DRAFT a page.
+    notion_page: dict[str, str] | None = None
 
     @property
     def label(self) -> str:
@@ -137,7 +145,17 @@ async def load_sheet_context(
         gmail_token=gmail_token,
         gmail_can_send=can_send,
         slack_channel=await _slack_channel(session, clerk_user_id),
+        notion_page=await _notion_page(session, clerk_user_id),
     )
+
+
+async def _notion_page(session: AsyncSession, clerk_user_id: str) -> dict[str, str] | None:
+    """Never blocks Q&A: any failure just means the Notion tool isn't offered."""
+    try:
+        return await notion_service.default_page(session, clerk_user_id)
+    except Exception:
+        logger.warning("notion_page_unavailable", exc_info=True)
+        return None
 
 
 async def _slack_channel(session: AsyncSession, clerk_user_id: str) -> dict[str, str] | None:
@@ -339,6 +357,7 @@ async def stream_answer(
                 fetch_emails,
                 can_draft_email=ctx.gmail_can_send,
                 slack_channel=ctx.slack_channel,
+                notion_page=ctx.notion_page,
             ),
         )
         system = build_system_prompt(
@@ -347,6 +366,7 @@ async def stream_answer(
             mail=bool(token),
             send=ctx.gmail_can_send,
             slack=bool(ctx.slack_channel),
+            notion=bool(ctx.notion_page),
         )
         messages = [
             SystemMessage(content=system),

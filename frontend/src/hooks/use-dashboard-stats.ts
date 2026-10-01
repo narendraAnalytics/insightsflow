@@ -18,7 +18,7 @@ export type DashboardSummary = {
     title: string;
     detail: string | null;
     at: string;
-    /** For connection events: google_sheets | gmail | slack. */
+    /** For connection events: google_sheets | gmail | slack | notion. */
     provider?: string | null;
   }[];
   sources: { id: string; name: string; tab_title: string; row_count: number; synced_at: string }[];

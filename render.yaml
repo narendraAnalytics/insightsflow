@@ -59,3 +59,11 @@ services:
         sync: false
       - key: SLACK_REDIRECT_URI # must match a Redirect URL registered on the Slack app
         value: https://insightsflow-zeb7.onrender.com/api/v1/connections/slack/callback
+      - key: NOTION_CLIENT_ID # Notion developer portal -> your connection -> OAuth
+        sync: false
+      - key: NOTION_CLIENT_SECRET
+        sync: false
+      - key: NOTION_REDIRECT_URI # must match a Redirect URI registered on the Notion connection
+        value: https://insightsflow-zeb7.onrender.com/api/v1/connections/notion/callback
+      - key: NOTION_VERSION # pinned Notion-Version header
+        value: "2026-03-11"

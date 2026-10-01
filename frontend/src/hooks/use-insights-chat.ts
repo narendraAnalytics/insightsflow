@@ -46,12 +46,28 @@ export type SlackDraft = {
   sent_at?: string;
 };
 
-export type Draft = EmailDraft | SlackDraft;
+/** A Notion page the AI drafted. Nothing is saved until the user clicks Save on the card. */
+export type NotionDraft = {
+  kind: "notion";
+  page_id: string;
+  page_title: string;
+  title: string;
+  body: string;
+  status: "draft" | "sent";
+  sent_at?: string;
+  url?: string;
+};
+
+export type Draft = EmailDraft | SlackDraft | NotionDraft;
 
 export const isSlackDraft = (d: Draft): d is SlackDraft => "kind" in d && d.kind === "slack";
+export const isNotionDraft = (d: Draft): d is NotionDraft => "kind" in d && d.kind === "notion";
+export const isEmailDraft = (d: Draft): d is EmailDraft => !("kind" in d);
 
 /** What the draft card can do — each one is the user's own click (the approval step). */
 export type DraftActions = {
+  /** Saves the (possibly edited) page under the draft's parent page. */
+  saveNotion: (stepId: string, title: string, body: string) => Promise<void>;
   /** Posts the (possibly edited) message to `channelId`. */
   postSlack: (stepId: string, channelId: string, text: string) => Promise<void>;
   send: (stepId: string, fields: DraftFields) => Promise<void>;
@@ -346,6 +362,27 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[], gmailRe
   // failure so the card can show it. Each is the user's own click on the card.
   const draftActions = useMemo<DraftActions>(
     () => ({
+      /** Saves a Notion draft now. */
+      saveNotion: async (stepId, title, body) => {
+        const conversation = conversationIdRef.current;
+        if (!conversation) throw new Error("Open the chat again to save this page.");
+        const token = await getToken();
+        const res = await apiFetch<{ status: string; sent_at: string; url: string }>(
+          "/api/v1/insights/notion/save",
+          token,
+          { method: "POST", body: { conversation_id: conversation, step_id: stepId, title, body } }
+        );
+        setMessages((prev) =>
+          prev.map((m) => ({
+            ...m,
+            steps: m.steps.map((s) =>
+              s.id === stepId && s.draft && isNotionDraft(s.draft)
+                ? { ...s, draft: { ...s.draft, title, body, status: "sent", sent_at: res.sent_at, url: res.url } }
+                : s
+            ),
+          }))
+        );
+      },
       /** Posts a Slack draft now. */
       postSlack: async (stepId, channelId, text) => {
         const conversation = conversationIdRef.current;
@@ -399,7 +436,7 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[], gmailRe
           prev.map((m) => ({
             ...m,
             steps: m.steps.map((s) =>
-              s.id === stepId && s.draft && !isSlackDraft(s.draft)
+              s.id === stepId && s.draft && isEmailDraft(s.draft)
                 ? { ...s, draft: { to: s.draft.to, subject: s.draft.subject, body: s.draft.body, status: "draft" } }
                 : s
             ),

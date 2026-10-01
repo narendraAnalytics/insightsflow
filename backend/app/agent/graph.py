@@ -91,12 +91,24 @@ SLACK_RULE = (
 )
 
 
+NOTION_RULE = (
+    "- When the user asks you to save, write up or document a result in Notion (or 'a report'), "
+    "first get the numbers with the analysis tools, then call draft_notion_page ONCE with a "
+    "specific title naming the finding and a plain-text body: a one-line summary, the key "
+    "figures from tool results as '- ' bullets, and a short conclusion. You cannot save: the "
+    "user reviews the draft card and clicks Save to Notion. Never say a page was saved. After "
+    "drafting, reply with one short sentence telling them to review and save it; do NOT repeat "
+    "the page text.\n"
+)
+
+
 def build_system_prompt(
     infos: list[TableInfo],
     truncated: bool,
     mail: bool = False,
     send: bool = False,
     slack: bool = False,
+    notion: bool = False,
 ) -> str:
     tables = (
         "\n".join(
@@ -116,7 +128,10 @@ def build_system_prompt(
     )
     note = " (each limited to its first 5,000 rows)" if truncated else ""
     mail_rules = (
-        (MAIL_RULE if mail else "") + (SEND_RULE if send else "") + (SLACK_RULE if slack else "")
+        (MAIL_RULE if mail else "")
+        + (SEND_RULE if send else "")
+        + (SLACK_RULE if slack else "")
+        + (NOTION_RULE if notion else "")
     )
     return SYSTEM_PROMPT.format(truncated=note, tables=tables, shared=shared_text, mail=mail_rules)
 

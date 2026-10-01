@@ -18,6 +18,8 @@ from pydantic import BaseModel
 from app.agent.numbers import number_to_words
 from app.core.errors import AppError
 from app.integrations.google.gmail import clean_body, clean_subject, parse_recipient
+from app.integrations.notion import clean_body as notion_clean_body
+from app.integrations.notion import clean_title as notion_clean_title
 from app.integrations.slack import clean_message as slack_clean_message
 
 MAX_ROWS_RETURNED = 20
@@ -279,6 +281,7 @@ def build_tools(
     fetch_emails: Callable[[int], list[dict[str, Any]]] | None = None,
     can_draft_email: bool = False,
     slack_channel: dict[str, str] | None = None,
+    notion_page: dict[str, str] | None = None,
 ) -> list[BaseTool]:
     """Tools closed over one request's tables. A bare DataFrame is accepted for
     the single-sheet case and becomes a one-table set named 'sheet'.
@@ -287,9 +290,29 @@ def build_tools(
     `can_draft_email` enables `draft_email`, which never sends: it only returns a
     draft for the user to review and send from the UI.
     `slack_channel` ({id, name}, the user's default channel) enables
-    `draft_slack_message`, which likewise only drafts — the user's click posts it."""
+    `draft_slack_message`, which likewise only drafts — the user's click posts it.
+    `notion_page` ({id, title}, the chosen parent page) enables `draft_notion_page`,
+    which also only drafts — the user's click saves it to Notion."""
     if isinstance(tables, pd.DataFrame):
         tables = TableSet({"sheet": tables})
+
+    def draft_notion_page(title: str, body: str) -> str:
+        assert notion_page is not None
+        body = re.split(r"<[a-zA-Z/!]", body, maxsplit=1)[0]  # runaway HTML, as for email
+        title, body = notion_clean_title(title), notion_clean_body(body)
+        if not title or not body:
+            return _err("A Notion page needs both a title and some content")
+        return _ok(
+            "Notion page drafted and shown to the user to review. It has NOT been saved.",
+            draft={
+                "kind": "notion",
+                "page_id": notion_page["id"],
+                "page_title": notion_page["title"],
+                "title": title,
+                "body": body,
+                "status": "draft",
+            },
+        )
 
     def draft_slack_message(text: str) -> str:
         assert slack_channel is not None
@@ -505,6 +528,21 @@ def build_tools(
             )
         )
 
+    if notion_page:
+        mail_tools.append(
+            StructuredTool.from_function(
+                draft_notion_page,
+                name="draft_notion_page",
+                description=(
+                    "Prepare a report page for the user to review and save to Notion "
+                    "themselves; this does NOT save anything. `title` names the finding; "
+                    "`body` is plain text: short paragraphs, '- ' for bullet points, '## ' "
+                    "for a section heading. Use only numbers from earlier tool results. "
+                    "The parent page is the user's chosen one and is fixed."
+                ),
+            )
+        )
+
     if slack_channel:
         mail_tools.append(
             StructuredTool.from_function(
@@ -580,6 +618,8 @@ def tool_label(name: str, args: dict[str, Any]) -> str:
         return "Drafting your email"
     if name == "draft_slack_message":
         return "Drafting your Slack message"
+    if name == "draft_notion_page":
+        return "Drafting your Notion page"
     if name == "describe_sheet":
         return "Reading the sheet structure"
     if name == "join_tables":

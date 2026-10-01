@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FileXls, Plug } from "@phosphor-icons/react";
-import { GmailGlyph, SlackGlyph } from "@/components/site/brand-icons";
+import { GmailGlyph, NotionGlyph, SlackGlyph } from "@/components/site/brand-icons";
 import { useDashboardSummary } from "@/hooks/use-dashboard-stats";
 
 function timeAgo(iso: string) {
@@ -50,6 +50,10 @@ export function RecentActivity() {
               ) : e.provider === "slack" ? (
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#e01e5a]/10">
                   <SlackGlyph role="img" aria-label="Slack" className="size-6" />
+                </span>
+              ) : e.provider === "notion" ? (
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-(--flow-peach)/70">
+                  <NotionGlyph role="img" aria-label="Notion" className="size-6" />
                 </span>
               ) : (
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#0f9d58]/12">

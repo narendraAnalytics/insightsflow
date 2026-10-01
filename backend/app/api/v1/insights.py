@@ -18,6 +18,7 @@ from app.services import (
     chat_service,
     email_service,
     insights_service,
+    notion_service,
     scheduled_email_service,
     slack_service,
 )
@@ -192,6 +193,33 @@ async def post_slack(
         db, principal.user_id, body.conversation_id, body.step_id, body.channel_id, body.text
     )
     return PostSlackResponse(**posted)
+
+
+class SaveNotionRequest(BaseModel):
+    conversation_id: uuid.UUID
+    step_id: str = Field(min_length=1, max_length=200)  # the draft_notion_page call's id
+    title: str = Field(min_length=1, max_length=300)
+    body: str = Field(min_length=1, max_length=30000)
+
+
+class SaveNotionResponse(BaseModel):
+    status: str
+    sent_at: str
+    url: str
+
+
+@router.post("/notion/save", response_model=SaveNotionResponse)
+async def save_notion(
+    body: SaveNotionRequest,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> SaveNotionResponse:
+    """Saves a Notion draft the user approved on the draft card — the only way anything is
+    written to Notion. The parent page comes from the stored draft, not this request."""
+    saved = await notion_service.save_draft(
+        db, principal.user_id, body.conversation_id, body.step_id, body.title, body.body
+    )
+    return SaveNotionResponse(**saved)
 
 
 class ScheduleEmailRequest(SendEmailRequest):

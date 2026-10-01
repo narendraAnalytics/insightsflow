@@ -80,6 +80,15 @@ class Settings(BaseSettings):
     slack_client_secret: str | None = None
     slack_redirect_uri: str | None = None
 
+    # Notion public connection (OAuth). Same shape as Slack: one app, each user connects
+    # their own workspace. notion_redirect_uri must exactly match a Redirect URI
+    # registered on the connection. notion_version is the Notion-Version header sent on
+    # every API call (pinned on purpose: Notion changes behaviour per version).
+    notion_client_id: str | None = None
+    notion_client_secret: str | None = None
+    notion_redirect_uri: str | None = None
+    notion_version: str = "2026-03-11"
+
     # Shared secret for the once-a-minute external pinger that calls
     # POST /api/v1/internal/email/run-due (sends due scheduled emails). Use a
     # long random string (32+ chars). Unset = the endpoint is disabled (503).

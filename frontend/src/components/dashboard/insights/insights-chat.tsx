@@ -18,11 +18,14 @@ import {
   WarningCircle,
 } from "@phosphor-icons/react";
 import NextLink from "next/link";
-import { GmailGlyph, SlackGlyph } from "@/components/site/brand-icons";
+import { GmailGlyph, NotionGlyph, SlackGlyph } from "@/components/site/brand-icons";
 import { useGmailConnection } from "@/hooks/use-gmail-connection";
+import { useNotionConnection } from "@/hooks/use-notion-connection";
 import { useSlackConnection } from "@/hooks/use-slack-connection";
 import { sourceLabel, useGoogleSheetsConnection, type DataSource } from "@/hooks/use-google-sheets-connection";
 import {
+  isEmailDraft,
+  isNotionDraft,
   isSlackDraft,
   useInsightsChat,
   type ChatMessage,
@@ -36,6 +39,7 @@ import {
 import { EmailCard, TableCard, ValueCard } from "@/components/dashboard/insights/result-card";
 import { EmailDraftCard } from "@/components/dashboard/insights/email-draft-card";
 import { SlackDraftCard } from "@/components/dashboard/insights/slack-draft-card";
+import { NotionDraftCard } from "@/components/dashboard/insights/notion-draft-card";
 
 // Deep, bright accents (no blue/violet) — used to tell suggestion chips apart.
 const chipAccents = [
@@ -146,7 +150,7 @@ function StepChip({ step }: { step: Step }) {
   );
 }
 
-const scheduledIdOf = (d: Draft | null | undefined) => (d && !isSlackDraft(d) ? (d.scheduled_id ?? "") : "");
+const scheduledIdOf = (d: Draft | null | undefined) => (d && isEmailDraft(d) ? (d.scheduled_id ?? "") : "");
 
 function AssistantMessage({
   message,
@@ -186,7 +190,13 @@ function AssistantMessage({
         )}
 
         {cards.map((s) =>
-          s.draft && isSlackDraft(s.draft) ? (
+          s.draft && isNotionDraft(s.draft) ? (
+            <NotionDraftCard
+              key={s.id}
+              draft={s.draft}
+              onSave={(title, body) => draftActions.saveNotion(s.id, title, body)}
+            />
+          ) : s.draft && isSlackDraft(s.draft) ? (
             <SlackDraftCard
               key={s.id}
               draft={s.draft}
@@ -498,7 +508,7 @@ function SlackStatus({ channelName, connected }: { channelName: string | null; c
   const base =
     "inline-flex items-center gap-2 rounded-full border border-(--flow-cream) bg-(--flow-cream)/80 px-3.5 py-1.5 font-(family-name:--font-zeyada) text-[21px] leading-none font-normal text-(--flow-ink)/85";
   return (
-    <div className="-mt-3 mb-5 flex flex-wrap items-center gap-2 self-start">
+    <>
       {channelName ? (
         <span
           className={base}
@@ -514,13 +524,36 @@ function SlackStatus({ channelName, connected }: { channelName: string | null; c
           Slack connected — choose a channel to post to →
         </NextLink>
       )}
-    </div>
+    </>
+  );
+}
+
+/** Same idea for Notion: where reports can be saved, and which page they go under. */
+function NotionStatus({ pageTitle, connected }: { pageTitle: string | null; connected: boolean }) {
+  if (!connected) return null;
+  const base =
+    "inline-flex items-center gap-2 rounded-full border border-(--flow-cream) bg-(--flow-cream)/80 px-3.5 py-1.5 font-(family-name:--font-zeyada) text-[21px] leading-none font-normal text-(--flow-ink)/85";
+  return pageTitle ? (
+    <span
+      className={base}
+      style={{ boxShadow: raised("var(--flow-peach)") }}
+      title="Ask AI Insights to save an answer to Notion. You review the draft before anything is saved."
+    >
+      <NotionGlyph aria-hidden className="size-4 shrink-0" />
+      Notion ready · {pageTitle}
+    </span>
+  ) : (
+    <NextLink href="/dashboard/integrations" className={`${base} hover:-translate-y-0.5 transition-transform`}>
+      <NotionGlyph aria-hidden className="size-4 shrink-0" />
+      Notion connected — choose a page to save under →
+    </NextLink>
   );
 }
 
 export function InsightsChat() {
   const reduce = useReducedMotion();
   const { connection: slackConnection } = useSlackConnection();
+  const { connection: notionConnection } = useNotionConnection();
   const { connection, loading } = useGoogleSheetsConnection();
   const { connection: gmailConnection, loading: gmailLoading } = useGmailConnection();
   const sources = useMemo(() => connection?.sources ?? [], [connection]);
@@ -658,10 +691,16 @@ export function InsightsChat() {
         disabled={busy}
         onChange={setSourceIds}
       />
-      <SlackStatus
-        connected={slackConnection?.status === "connected"}
-        channelName={slackConnection?.slack_channel_name ?? null}
-      />
+      <div className="-mt-3 mb-5 flex flex-wrap items-center gap-2 self-start">
+        <SlackStatus
+          connected={slackConnection?.status === "connected"}
+          channelName={slackConnection?.slack_channel_name ?? null}
+        />
+        <NotionStatus
+          connected={notionConnection?.status === "connected"}
+          pageTitle={notionConnection?.notion_page_title ?? null}
+        />
+      </div>
       {sourceRemoved && (
         <p
           role="status"

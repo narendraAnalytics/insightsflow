@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactElement, type SVGProps } from "r
 import Link from "next/link";
 import { animate, motion, useReducedMotion } from "framer-motion";
 import { ArrowUpRight, ChatsCircle, FileXls, Plug, Table } from "@phosphor-icons/react";
-import { GmailGlyph, GoogleSheetsGlyph, SlackGlyph } from "@/components/site/brand-icons";
+import { GmailGlyph, GoogleSheetsGlyph, NotionGlyph, SlackGlyph } from "@/components/site/brand-icons";
 import { useDashboardSummary } from "@/hooks/use-dashboard-stats";
 
 type Summary = NonNullable<ReturnType<typeof useDashboardSummary>["summary"]>;
@@ -14,6 +14,7 @@ const PROVIDER_ICONS: Record<string, { label: string; Glyph: (props: SVGProps<SV
   google_sheets: { label: "Google Sheets", Glyph: GoogleSheetsGlyph },
   gmail: { label: "Gmail", Glyph: GmailGlyph },
   slack: { label: "Slack", Glyph: SlackGlyph },
+  notion: { label: "Notion", Glyph: NotionGlyph },
 };
 
 type KpiConfig = {

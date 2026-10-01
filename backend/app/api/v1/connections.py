@@ -19,7 +19,7 @@ from app.db.models.data_source import DataSource
 from app.db.session import get_db
 from app.integrations import slack
 from app.integrations.google import gmail as google_gmail
-from app.services import connection_service, data_source_service, slack_service
+from app.services import connection_service, data_source_service, notion_service, slack_service
 
 router = APIRouter(prefix="/connections", tags=["connections"])
 
@@ -85,11 +85,14 @@ class ConnectionResponse(BaseModel):
     # Slack only: the default channel for approved posts (None until one is chosen).
     slack_channel_id: str | None = None
     slack_channel_name: str | None = None
+    # Notion only: the parent page approved reports are saved under (None until chosen).
+    notion_page_id: str | None = None
+    notion_page_title: str | None = None
     sources: list[DataSourceOut]
 
     @classmethod
     def from_model(cls, c: Connection, sources: list[DataSource]) -> "ConnectionResponse":
-        cfg = (c.config or {}) if c.provider == "slack" else {}
+        cfg = (c.config or {}) if c.provider in ("slack", "notion") else {}
         return cls(
             provider=c.provider,
             status=c.status,
@@ -97,6 +100,8 @@ class ConnectionResponse(BaseModel):
             can_read_mail=c.provider == "gmail" and google_gmail.has_read_scope(c.scopes),
             slack_channel_id=cfg.get("channel_id"),
             slack_channel_name=cfg.get("channel_name"),
+            notion_page_id=cfg.get("page_id") if c.provider == "notion" else None,
+            notion_page_title=cfg.get("page_title") if c.provider == "notion" else None,
             sources=[DataSourceOut.from_model(s) for s in sources],
         )
 
@@ -304,3 +309,68 @@ async def slack_disconnect(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     await slack_service.disconnect(db, principal.user_id)
+
+
+class NotionPageOut(BaseModel):
+    id: str
+    title: str
+
+
+class SetNotionPageRequest(BaseModel):
+    page_id: str = Field(min_length=32, max_length=36, pattern=r"^[0-9a-fA-F-]{32,36}$")
+
+
+class NotionPageChoice(BaseModel):
+    page_id: str
+    page_title: str
+
+
+@router.get("/notion/connect-url", response_model=ConnectUrlResponse)
+async def notion_connect_url(
+    principal: Principal = Depends(get_current_principal),
+) -> ConnectUrlResponse:
+    return ConnectUrlResponse(url=notion_service.start_connect(principal.user_id))
+
+
+@router.get("/notion/callback")
+async def notion_callback(
+    code: str | None = Query(default=None),
+    state: str = Query(...),
+    error: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> RedirectResponse:
+    base = f"{get_settings().frontend_url}/dashboard/integrations"
+    # The user clicked "Cancel" on Notion's consent screen (error=access_denied).
+    if error or not code:
+        return RedirectResponse(url=f"{base}?notion_error=denied")
+    clerk_user_id, _ = verify_state(state)
+    await notion_service.complete_connect(db, clerk_user_id, code)
+    return RedirectResponse(url=f"{base}?connected=notion")
+
+
+@router.get("/notion/pages", response_model=list[NotionPageOut])
+async def notion_pages(
+    q: str = Query(default="", max_length=100),
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> list[NotionPageOut]:
+    pages = await notion_service.list_pages(db, principal.user_id, q)
+    return [NotionPageOut(id=p.id, title=p.title) for p in pages]
+
+
+@router.put("/notion/page", response_model=NotionPageChoice)
+async def notion_set_page(
+    body: SetNotionPageRequest,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> NotionPageChoice:
+    config = await notion_service.set_page(db, principal.user_id, body.page_id)
+    return NotionPageChoice(page_id=config["page_id"], page_title=config["page_title"])
+
+
+@router.delete("/notion", status_code=204)
+async def notion_disconnect(
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await notion_service.disconnect(db, principal.user_id)
