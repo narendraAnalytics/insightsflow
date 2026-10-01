@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import AppError
 from app.core.security import Principal, get_current_principal
 from app.db.session import get_db
-from app.services import chat_service, insights_service
+from app.services import chat_service, email_service, insights_service
 
 router = APIRouter(prefix="/insights", tags=["insights"])
 
@@ -127,6 +127,38 @@ async def delete_conversation(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     await chat_service.delete_conversation(db, principal.user_id, conversation_id)
+
+
+class SendEmailRequest(BaseModel):
+    conversation_id: uuid.UUID
+    step_id: str = Field(min_length=1, max_length=200)  # the draft_email tool call's id
+    to: str = Field(min_length=3, max_length=320)
+    subject: str = Field(min_length=1, max_length=300)
+    body: str = Field(min_length=1, max_length=10000)
+
+
+class SendEmailResponse(BaseModel):
+    status: str
+    sent_at: str
+
+
+@router.post("/email/send", response_model=SendEmailResponse)
+async def send_email(
+    body: SendEmailRequest,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> SendEmailResponse:
+    """Sends a draft the user approved on the draft card — the only way mail is sent."""
+    sent = await email_service.send_draft(
+        db,
+        principal.user_id,
+        body.conversation_id,
+        body.step_id,
+        body.to,
+        body.subject,
+        body.body,
+    )
+    return SendEmailResponse(**sent)
 
 
 @router.post("/ask")

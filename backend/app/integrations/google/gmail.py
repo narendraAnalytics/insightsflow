@@ -2,14 +2,19 @@
 runs its own consent flow (`include_granted_scopes` is off, so the token carries
 only Gmail's scopes and Sheets' drive.file grant stays untouched).
 
-Scopes: `gmail.send` (sensitive; sending itself is not built yet and must sit
-behind the human-approval step) and `gmail.readonly`, which is a RESTRICTED
+Scopes: `gmail.send` (sensitive; sending only ever happens from the user's click
+on an email-draft card, never straight from the agent) and `gmail.readonly`, which is a RESTRICTED
 scope — fine for the project owner and listed test users, but a public launch
 needs Google's restricted-scope verification (incl. a paid security assessment).
 Reading is dev-only until that decision is made; see the note in CLAUDE.md.
 """
 
+import base64
+import re
 from dataclasses import dataclass
+from email.message import EmailMessage
+from email.utils import parseaddr
+from html import escape
 
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -27,12 +32,21 @@ SCOPES = [
     "openid",
 ]
 
+SEND_SCOPE = "https://www.googleapis.com/auth/gmail.send"
+
 MAX_MESSAGES = 10
+MAX_SUBJECT = 150
+MAX_BODY = 5000
 
 
 class GmailApiError(AppError):
     status_code = 502
     code = "gmail_api_error"
+
+
+class InvalidEmail(AppError):
+    status_code = 400
+    code = "invalid_email"
 
 
 @dataclass
@@ -47,6 +61,75 @@ class EmailSummary:
 def has_read_scope(scopes: str) -> bool:
     """`scopes` is the comma-joined string stored on the Connection row."""
     return READONLY_SCOPE in scopes.split(",")
+
+
+def has_send_scope(scopes: str) -> bool:
+    return SEND_SCOPE in scopes.split(",")
+
+
+_ADDRESS = re.compile(r"^[^@\s<>,;\"']+@[^@\s<>,;\"']+\.[^@\s<>,;\"']+$")
+
+
+def clean_subject(subject: str) -> str:
+    """One line, trimmed, capped — a newline in a header would be header injection."""
+    return " ".join(subject.split())[:MAX_SUBJECT]
+
+
+def clean_body(body: str) -> str:
+    return body.replace("\r\n", "\n").strip()[:MAX_BODY]
+
+
+def parse_recipient(to: str) -> str | None:
+    """The bare address if `to` is exactly one valid recipient, else None. Multiple
+    recipients are refused on purpose: v1 sends to one person per click."""
+    _, address = parseaddr(to.strip())
+    if not address or len(address) > 254 or not _ADDRESS.match(address):
+        return None
+    if any(sep in to for sep in (",", ";")):
+        return None
+    return address
+
+
+def _html_body(body: str) -> str:
+    paragraphs = (p.strip() for p in body.split("\n\n") if p.strip())
+    inner = "".join(f"<p>{escape(p).replace(chr(10), '<br>')}</p>" for p in paragraphs)
+    return f'<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.5">{inner}</div>'
+
+
+def send_message(access_token: str, to: str, subject: str, body: str) -> str:
+    """Blocking — call via asyncio.to_thread. Sends one email from the user's own
+    Gmail account and returns Gmail's message id. Fields are re-validated here, so
+    nothing malformed reaches Gmail whatever the caller did."""
+    recipient = parse_recipient(to)
+    if recipient is None:
+        raise InvalidEmail("Enter exactly one valid email address.")
+    subject, body = clean_subject(subject), clean_body(body)
+    if not subject or not body:
+        raise InvalidEmail("An email needs a subject and a message.")
+
+    message = EmailMessage()
+    message["To"] = recipient
+    message["Subject"] = subject
+    message.set_content(body)
+    message.add_alternative(_html_body(body), subtype="html")
+    raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+
+    service = build(
+        "gmail",
+        "v1",
+        credentials=sheets.Credentials(token=access_token),
+        cache_discovery=False,
+    )
+    try:
+        sent = service.users().messages().send(userId="me", body={"raw": raw}).execute()
+    except HttpError as exc:
+        status = getattr(exc.resp, "status", 0)
+        if status in (401, 403):
+            raise GmailApiError(
+                "Gmail didn't allow sending. Reconnect Gmail on the Integrations page."
+            ) from exc
+        raise GmailApiError("Gmail couldn't send the email. Try again.") from exc
+    return str(sent.get("id", ""))
 
 
 def build_auth_url(state: str, code_verifier: str) -> str:

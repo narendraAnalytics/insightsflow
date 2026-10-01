@@ -53,6 +53,9 @@ class SheetContext:
     truncated: bool
     # Set only when the user's Gmail connection has the read scope (dev-only feature).
     gmail_token: str | None = None
+    # The same connection also holds the send scope, so the agent may DRAFT emails
+    # (it can never send: the user's click on the draft card does that).
+    gmail_can_send: bool = False
 
     @property
     def label(self) -> str:
@@ -95,9 +98,9 @@ async def load_sheet_context(
     if len(ids) > MAX_SOURCES_PER_CHAT:
         raise TooManySourcesInChat(f"A chat can use up to {MAX_SOURCES_PER_CHAT} sheets at once")
 
-    gmail_token = None
+    gmail_token, can_send = None, False
     if use_gmail:
-        gmail_token = await _gmail_read_token(session, clerk_user_id)
+        gmail_token, can_send = await _gmail_access(session, clerk_user_id)
         if gmail_token is None:
             raise GmailNotReadable(
                 "Gmail isn't connected with permission to read email. "
@@ -125,23 +128,26 @@ async def load_sheet_context(
         frames = [build_frame(p.headers, p.rows) for p in previews]
         tables = dict(zip(_table_names(sources), frames, strict=True))
         truncated = any(len(f) >= MAX_SHEET_ROWS for f in frames)
-    return SheetContext(tables=tables, truncated=truncated, gmail_token=gmail_token)
+    return SheetContext(
+        tables=tables, truncated=truncated, gmail_token=gmail_token, gmail_can_send=can_send
+    )
 
 
-async def _gmail_read_token(session: AsyncSession, clerk_user_id: str) -> str | None:
-    """A Gmail access token, only if Gmail is connected WITH the read scope.
-    Never blocks sheet Q&A: any failure (not connected, revoked, expired
-    refresh token) just means the email tool isn't offered."""
+async def _gmail_access(session: AsyncSession, clerk_user_id: str) -> tuple[str | None, bool]:
+    """(access token, may-send) — the token only if Gmail is connected WITH the read
+    scope. Never blocks sheet Q&A: any failure (not connected, revoked, expired
+    refresh token) just means the email tools aren't offered."""
     try:
         connection = await connection_service.get_connection(session, clerk_user_id, "gmail")
         if connection.status != "connected" or not google_gmail.has_read_scope(connection.scopes):
-            return None
-        return await connection_service.get_valid_access_token(session, connection)
+            return None, False
+        token = await connection_service.get_valid_access_token(session, connection)
+        return token, google_gmail.has_send_scope(connection.scopes)
     except NotFoundError:
-        return None
+        return None, False
     except Exception:
         logger.warning("gmail_token_unavailable", exc_info=True)
-        return None
+        return None, False
 
 
 def _table_infos(ctx: SheetContext) -> list[TableInfo]:
@@ -258,6 +264,7 @@ def _tool_result_event(msg: ToolMessage) -> dict[str, Any]:
         "table": payload.get("table"),
         "headline": payload.get("headline"),
         "emails": payload.get("emails"),
+        "draft": payload.get("draft"),
     }
 
 
@@ -309,8 +316,13 @@ async def stream_answer(
             if token
             else None
         )
-        graph = build_graph(llm, build_tools(TableSet(ctx.tables), fetch_emails))
-        system = build_system_prompt(_table_infos(ctx), ctx.truncated, mail=bool(token))
+        graph = build_graph(
+            llm,
+            build_tools(TableSet(ctx.tables), fetch_emails, can_draft_email=ctx.gmail_can_send),
+        )
+        system = build_system_prompt(
+            _table_infos(ctx), ctx.truncated, mail=bool(token), send=ctx.gmail_can_send
+        )
         messages = [
             SystemMessage(content=system),
             *_history_messages(history),
@@ -355,6 +367,7 @@ async def stream_answer(
                                             table=result.get("table"),
                                             headline=result.get("headline"),
                                             emails=result.get("emails"),
+                                            draft=result.get("draft"),
                                         )
                                 yield _sse("tool_result", result)
         yield _sse("done", {})

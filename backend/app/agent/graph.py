@@ -69,7 +69,20 @@ MAIL_RULE = (
 )
 
 
-def build_system_prompt(infos: list[TableInfo], truncated: bool, mail: bool = False) -> str:
+SEND_RULE = (
+    "- When the user asks you to email, send or share a result, first get the numbers with the "
+    "analysis tools, then call draft_email ONCE with a specific subject that names the finding "
+    "(e.g. 'Q3 sales: West leads'), a short friendly body (greeting, the key figures from "
+    "tool results, a one-line sign-off) in plain text, and `to` only if the user typed an "
+    "address. You cannot send mail: the user reviews the draft card and clicks Send. Never say "
+    "an email was sent. After drafting, reply with one short sentence telling them to review "
+    "and send it; do NOT repeat the email text.\n"
+)
+
+
+def build_system_prompt(
+    infos: list[TableInfo], truncated: bool, mail: bool = False, send: bool = False
+) -> str:
     tables = (
         "\n".join(
             f'- "{t.name}" — {t.rows} rows: '
@@ -87,9 +100,8 @@ def build_system_prompt(infos: list[TableInfo], truncated: bool, mail: bool = Fa
         else ""
     )
     note = " (each limited to its first 5,000 rows)" if truncated else ""
-    return SYSTEM_PROMPT.format(
-        truncated=note, tables=tables, shared=shared_text, mail=MAIL_RULE if mail else ""
-    )
+    mail_rules = (MAIL_RULE if mail else "") + (SEND_RULE if send else "")
+    return SYSTEM_PROMPT.format(truncated=note, tables=tables, shared=shared_text, mail=mail_rules)
 
 
 def build_graph(llm: BaseChatModel, tools: list[BaseTool]) -> Any:

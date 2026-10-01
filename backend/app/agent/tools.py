@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 from app.agent.numbers import number_to_words
 from app.core.errors import AppError
+from app.integrations.google.gmail import clean_body, clean_subject, parse_recipient
 
 MAX_ROWS_RETURNED = 20
 Op = Literal["sum", "mean", "median", "min", "max", "count"]
@@ -275,13 +276,30 @@ def _email_card(raw: dict[str, Any]) -> dict[str, Any]:
 def build_tools(
     tables: TableSet | pd.DataFrame,
     fetch_emails: Callable[[int], list[dict[str, Any]]] | None = None,
+    can_draft_email: bool = False,
 ) -> list[BaseTool]:
     """Tools closed over one request's tables. A bare DataFrame is accepted for
     the single-sheet case and becomes a one-table set named 'sheet'.
     `fetch_emails(count)` (rows of sender/subject/date) enables `recent_emails`
-    — it is only passed when the user's Gmail connection may read mail."""
+    — it is only passed when the user's Gmail connection may read mail.
+    `can_draft_email` enables `draft_email`, which never sends: it only returns a
+    draft for the user to review and send from the UI."""
     if isinstance(tables, pd.DataFrame):
         tables = TableSet({"sheet": tables})
+
+    def draft_email(subject: str, body: str, to: str = "") -> str:
+        # Sarvam once trailed a body with runaway HTML (`</span></div>…`). Emails here are
+        # plain text, so anything from the first tag-like sequence on is dropped.
+        body = re.split(r"<[a-zA-Z/!]", body, maxsplit=1)[0]
+        subject, body = clean_subject(subject), clean_body(body)
+        if not subject or not body:
+            return _err("A draft needs both a subject and a message body")
+        # An address that isn't one valid recipient is dropped: the user types it on the card.
+        recipient = parse_recipient(to) if to else None
+        return _ok(
+            "Email draft prepared and shown to the user to review. It has NOT been sent.",
+            draft={"to": recipient or "", "subject": subject, "body": body, "status": "draft"},
+        )
 
     def recent_emails(count: int = 5) -> str:
         assert fetch_emails is not None
@@ -452,6 +470,20 @@ def build_tools(
         if fetch_emails
         else []
     )
+    if can_draft_email:
+        mail_tools.append(
+            StructuredTool.from_function(
+                draft_email,
+                name="draft_email",
+                description=(
+                    "Prepare an email for the user to review and send themselves; this does "
+                    "NOT send anything. Write a clear subject and a short, friendly body "
+                    "(greeting, the key findings using only numbers from earlier tool "
+                    "results, a sign-off). Set `to` ONLY if the user gave that address "
+                    "in their message, otherwise leave it empty."
+                ),
+            )
+        )
 
     if not tables.tables:  # an email-only chat has no sheet tools to offer
         return mail_tools
@@ -510,6 +542,8 @@ def tool_label(name: str, args: dict[str, Any]) -> str:
     where = f" in {args['table']}" if args.get("table") else ""
     if name == "recent_emails":
         return f"Reading your {args.get('count', 5)} latest emails"
+    if name == "draft_email":
+        return "Drafting your email"
     if name == "describe_sheet":
         return "Reading the sheet structure"
     if name == "join_tables":
