@@ -29,6 +29,8 @@ services:
         value: https://insightsflow-zeb7.onrender.com
       - key: GOOGLE_REDIRECT_URI
         value: https://insightsflow-zeb7.onrender.com/api/v1/connections/google/callback
+      - key: GOOGLE_GMAIL_REDIRECT_URI # Gmail has its own consent flow + registered URI
+        value: https://insightsflow-zeb7.onrender.com/api/v1/connections/gmail/callback
       - key: DATABASE_URL # Neon *production* branch, pooled
         sync: false
       - key: DATABASE_URL_DIRECT # Neon *production* branch, unpooled
@@ -48,4 +50,6 @@ services:
       - key: TOKEN_ENCRYPTION_KEYS # NEW value ("v1:<fernet key>"), not dev's
         sync: false
       - key: SARVAM_API_KEY
+        sync: false
+      - key: CRON_SECRET # 32+ random chars; also the X-Cron-Secret header on the pinger
         sync: false
