@@ -72,6 +72,11 @@ class Settings(BaseSettings):
     oauth_state_secret: str | None = None
     token_encryption_keys: str | None = None
 
+    # Shared secret for the once-a-minute external pinger that calls
+    # POST /api/v1/internal/email/run-due (sends due scheduled emails). Use a
+    # long random string (32+ chars). Unset = the endpoint is disabled (503).
+    cron_secret: str | None = None
+
     # Phase 4: agent LLM (app/agent/llm.py). Reasoning tokens count toward
     # max_tokens on sarvam-105b, so keep the budget generous.
     sarvam_api_key: str | None = None

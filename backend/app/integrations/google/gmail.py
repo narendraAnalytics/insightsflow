@@ -90,6 +90,18 @@ def parse_recipient(to: str) -> str | None:
     return address
 
 
+def validated_fields(to: str, subject: str, body: str) -> tuple[str, str, str]:
+    """(recipient address, subject, body), cleaned — or InvalidEmail. Used by both
+    immediate and scheduled sends so the same rules apply to each."""
+    recipient = parse_recipient(to)
+    if recipient is None:
+        raise InvalidEmail("Enter exactly one valid email address.")
+    subject, body = clean_subject(subject), clean_body(body)
+    if not subject or not body:
+        raise InvalidEmail("An email needs a subject and a message.")
+    return recipient, subject, body
+
+
 def _html_body(body: str) -> str:
     paragraphs = (p.strip() for p in body.split("\n\n") if p.strip())
     inner = "".join(f"<p>{escape(p).replace(chr(10), '<br>')}</p>" for p in paragraphs)
@@ -100,12 +112,7 @@ def send_message(access_token: str, to: str, subject: str, body: str) -> str:
     """Blocking — call via asyncio.to_thread. Sends one email from the user's own
     Gmail account and returns Gmail's message id. Fields are re-validated here, so
     nothing malformed reaches Gmail whatever the caller did."""
-    recipient = parse_recipient(to)
-    if recipient is None:
-        raise InvalidEmail("Enter exactly one valid email address.")
-    subject, body = clean_subject(subject), clean_body(body)
-    if not subject or not body:
-        raise InvalidEmail("An email needs a subject and a message.")
+    recipient, subject, body = validated_fields(to, subject, body)
 
     message = EmailMessage()
     message["To"] = recipient

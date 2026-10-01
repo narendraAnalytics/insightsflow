@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import AppError
 from app.core.security import Principal, get_current_principal
 from app.db.session import get_db
-from app.services import chat_service, email_service, insights_service
+from app.services import chat_service, email_service, insights_service, scheduled_email_service
 
 router = APIRouter(prefix="/insights", tags=["insights"])
 
@@ -159,6 +159,46 @@ async def send_email(
         body.body,
     )
     return SendEmailResponse(**sent)
+
+
+class ScheduleEmailRequest(SendEmailRequest):
+    # Must include a UTC offset (the UI sends IST as +05:30).
+    send_at: datetime
+
+
+class ScheduleEmailResponse(BaseModel):
+    id: str
+    status: str
+    send_at: str
+
+
+@router.post("/email/schedule", response_model=ScheduleEmailResponse)
+async def schedule_email(
+    body: ScheduleEmailRequest,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> ScheduleEmailResponse:
+    """Approves a draft to be sent later (2 minutes to 7 days ahead)."""
+    scheduled = await scheduled_email_service.schedule_draft(
+        db,
+        principal.user_id,
+        body.conversation_id,
+        body.step_id,
+        body.to,
+        body.subject,
+        body.body,
+        body.send_at,
+    )
+    return ScheduleEmailResponse(**scheduled)
+
+
+@router.post("/email/schedule/{scheduled_id}/cancel", status_code=204)
+async def cancel_scheduled_email(
+    scheduled_id: uuid.UUID,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await scheduled_email_service.cancel(db, principal.user_id, scheduled_id)
 
 
 @router.post("/ask")
