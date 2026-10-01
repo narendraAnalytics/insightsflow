@@ -88,6 +88,10 @@ export function ProjectActivityChart() {
                   tickLine={false}
                   tick={{ fontSize: 15, fontFamily: "var(--font-zeyada)", fill: "var(--flow-ink)", opacity: 0.55 }}
                   dy={6}
+                  // Show all 7 days, and inset the first/last points so "Fri" and "Thu" aren't
+                  // cut off at the chart's edges (labels are centred on their point).
+                  interval={0}
+                  padding={{ left: 18, right: 18 }}
                 />
                 <Tooltip content={<TooltipCard />} cursor={{ stroke: "var(--flow-ink)", strokeOpacity: 0.15 }} />
                 {SERIES.map((s) => (
