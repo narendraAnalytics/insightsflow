@@ -17,8 +17,10 @@ import {
   Trash,
   WarningCircle,
 } from "@phosphor-icons/react";
-import { GmailGlyph } from "@/components/site/brand-icons";
+import NextLink from "next/link";
+import { GmailGlyph, SlackGlyph } from "@/components/site/brand-icons";
 import { useGmailConnection } from "@/hooks/use-gmail-connection";
+import { useSlackConnection } from "@/hooks/use-slack-connection";
 import { sourceLabel, useGoogleSheetsConnection, type DataSource } from "@/hooks/use-google-sheets-connection";
 import {
   isSlackDraft,
@@ -489,8 +491,36 @@ function SourcePicker({
   );
 }
 
+/** Slack isn't something you ask about — it's where results go. So it's a status pill, not a
+ * checkbox: lit with the channel when posting is ready, a nudge to finish setup otherwise. */
+function SlackStatus({ channelName, connected }: { channelName: string | null; connected: boolean }) {
+  if (!connected) return null;
+  const base =
+    "inline-flex items-center gap-2 rounded-full border border-(--flow-cream) bg-(--flow-cream)/80 px-3.5 py-1.5 font-(family-name:--font-zeyada) text-[21px] leading-none font-normal text-(--flow-ink)/85";
+  return (
+    <div className="-mt-3 mb-5 flex flex-wrap items-center gap-2 self-start">
+      {channelName ? (
+        <span
+          className={base}
+          style={{ boxShadow: raised("var(--flow-peach)") }}
+          title="Ask AI Insights to post an answer to Slack. You review the draft before anything is posted."
+        >
+          <SlackGlyph aria-hidden className="size-4 shrink-0" />
+          Slack ready · #{channelName}
+        </span>
+      ) : (
+        <NextLink href="/dashboard/integrations" className={`${base} hover:-translate-y-0.5 transition-transform`}>
+          <SlackGlyph aria-hidden className="size-4 shrink-0" />
+          Slack connected — choose a channel to post to →
+        </NextLink>
+      )}
+    </div>
+  );
+}
+
 export function InsightsChat() {
   const reduce = useReducedMotion();
+  const { connection: slackConnection } = useSlackConnection();
   const { connection, loading } = useGoogleSheetsConnection();
   const { connection: gmailConnection, loading: gmailLoading } = useGmailConnection();
   const sources = useMemo(() => connection?.sources ?? [], [connection]);
@@ -627,6 +657,10 @@ export function InsightsChat() {
         removed={sourceRemoved}
         disabled={busy}
         onChange={setSourceIds}
+      />
+      <SlackStatus
+        connected={slackConnection?.status === "connected"}
+        channelName={slackConnection?.slack_channel_name ?? null}
       />
       {sourceRemoved && (
         <p
