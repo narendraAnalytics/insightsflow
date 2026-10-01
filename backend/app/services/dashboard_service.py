@@ -24,6 +24,9 @@ class Stats:
     connected_sheets: int
     connected_tabs: int
     questions_asked: int
+    # Which providers are connected (e.g. ["google_sheets", "gmail"]), oldest first,
+    # so the UI can show their icons instead of a hardcoded label.
+    connected_providers: list[str]
 
 
 @dataclass
@@ -32,6 +35,7 @@ class ActivityEvent:
     title: str
     detail: str | None
     at: datetime
+    provider: str | None = None  # set for connection events
 
 
 @dataclass
@@ -69,11 +73,19 @@ async def get_stats(db: AsyncSession, user_id: uuid.UUID) -> Stats:
         .join(ChatConversation, ChatConversation.id == ChatMessage.conversation_id)
         .where(ChatConversation.user_id == user_id, ChatMessage.role == "user"),
     )
+    providers = (
+        await db.execute(
+            select(Connection.provider)
+            .where(Connection.user_id == user_id, Connection.status == "connected")
+            .order_by(Connection.created_at)
+        )
+    ).scalars()
     return Stats(
         active_integrations=integrations,
         connected_sheets=sheets,
         connected_tabs=tabs,
         questions_asked=questions,
+        connected_providers=list(dict.fromkeys(providers)),
     )
 
 
@@ -101,7 +113,11 @@ async def recent_activity(db: AsyncSession, user_id: uuid.UUID) -> list[Activity
         app_name = "Gmail" if c.provider == "gmail" else "Google Sheets"
         events.append(
             ActivityEvent(
-                "connection", f"Connected {app_name}", c.external_account_email, c.created_at
+                "connection",
+                f"Connected {app_name}",
+                c.external_account_email,
+                c.created_at,
+                c.provider,
             )
         )
 
@@ -136,17 +152,35 @@ async def _counts_by_day(db: AsyncSession, stmt: Select[Any]) -> dict[str, int]:
 
 
 async def daily_activity(db: AsyncSession, user_id: uuid.UUID) -> list[DailyActivity]:
-    """Connections/sources/questions created per day, last DAILY_ACTIVITY_DAYS days
-    (zero-filled — there's no activity-log table, so a quiet day is just an absence
-    of rows, not a stored zero)."""
+    """Per day for the last DAILY_ACTIVITY_DAYS days: sources and questions CREATED that
+    day (zero-filled — there's no activity-log table, so a quiet day is just an absence
+    of rows, not a stored zero), and connections as a running total of what is connected."""
     today = datetime.now(UTC).date()
     start_day = today - timedelta(days=DAILY_ACTIVITY_DAYS - 1)
     since = datetime.combine(start_day, time.min, tzinfo=UTC)
 
-    connections = await _counts_by_day(
+    # Connections are a RUNNING TOTAL (how many were connected as of each day), not
+    # per-day creations: a connection made 6 days ago must still count today, and one
+    # made earlier than the window must not vanish from the chart. Current status is
+    # used (there's no history of disconnects), so a disconnected app isn't counted.
+    connected_before_window = await _count(
+        db,
+        select(func.count())
+        .select_from(Connection)
+        .where(
+            Connection.user_id == user_id,
+            Connection.status == "connected",
+            Connection.created_at < since,
+        ),
+    )
+    connections_created = await _counts_by_day(
         db,
         select(func.date(Connection.created_at), func.count())
-        .where(Connection.user_id == user_id, Connection.created_at >= since)
+        .where(
+            Connection.user_id == user_id,
+            Connection.status == "connected",
+            Connection.created_at >= since,
+        )
         .group_by(func.date(Connection.created_at)),
     )
     sources = await _counts_by_day(
@@ -169,13 +203,15 @@ async def daily_activity(db: AsyncSession, user_id: uuid.UUID) -> list[DailyActi
     )
 
     days: list[DailyActivity] = []
+    connected = connected_before_window
     for offset in range(DAILY_ACTIVITY_DAYS):
         day: date = today - timedelta(days=DAILY_ACTIVITY_DAYS - 1 - offset)
         key = str(day)
+        connected += connections_created.get(key, 0)
         days.append(
             DailyActivity(
                 date=key,
-                connections=connections.get(key, 0),
+                connections=connected,
                 sources=sources.get(key, 0),
                 chats=chats.get(key, 0),
             )

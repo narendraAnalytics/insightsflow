@@ -21,6 +21,7 @@ class StatsOut(BaseModel):
     connected_sheets: int
     connected_tabs: int
     questions_asked: int
+    connected_providers: list[str]
 
 
 class ActivityOut(BaseModel):
@@ -28,6 +29,8 @@ class ActivityOut(BaseModel):
     title: str
     detail: str | None
     at: datetime
+    # For kind == "connection": which app (google_sheets | gmail), so the UI can draw its icon.
+    provider: str | None = None
 
 
 class SourceOut(BaseModel):
