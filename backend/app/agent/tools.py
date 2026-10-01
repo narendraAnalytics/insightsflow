@@ -17,9 +17,12 @@ from pydantic import BaseModel
 
 from app.agent.numbers import number_to_words
 from app.core.errors import AppError
+from app.integrations.google.gmail import MAX_BODY as EMAIL_MAX_BODY
 from app.integrations.google.gmail import clean_body, clean_subject, parse_recipient
+from app.integrations.notion import MAX_BODY as NOTION_MAX_BODY
 from app.integrations.notion import clean_body as notion_clean_body
 from app.integrations.notion import clean_title as notion_clean_title
+from app.integrations.slack import MAX_MESSAGE as SLACK_MAX_MESSAGE
 from app.integrations.slack import clean_message as slack_clean_message
 
 MAX_ROWS_RETURNED = 20
@@ -177,8 +180,22 @@ class TableSet:
 
     def __init__(self, tables: dict[str, pd.DataFrame]):
         self.tables = dict(tables)
+        self._used: list[str] = []  # original sheets the analysis tools actually read
+        self._derived: dict[str, list[str]] = {}  # joined table -> the sheets it came from
 
-    def resolve(self, name: str | None) -> tuple[str, pd.DataFrame]:
+    def _bases(self, key: str) -> list[str]:
+        return self._derived.get(key, [key])
+
+    def resolve(self, name: str | None, track: bool = True) -> tuple[str, pd.DataFrame]:
+        """`track=False` for lookups that don't produce numbers (describe, join set-up)."""
+        found = self._find(name)
+        if track:
+            for base in self._bases(found[0]):
+                if base not in self._used:
+                    self._used.append(base)
+        return found
+
+    def _find(self, name: str | None) -> tuple[str, pd.DataFrame]:
         if name is None or not name.strip():
             if len(self.tables) == 1:
                 return next(iter(self.tables.items()))
@@ -192,12 +209,32 @@ class TableSet:
                 return key, frame
         raise _ToolError(f"No table named '{name}'. Tables: {', '.join(self.tables)}")
 
-    def register(self, wanted: str, frame: pd.DataFrame) -> str:
+    def register(self, wanted: str, frame: pd.DataFrame, sources: list[str] | None = None) -> str:
         name, n = wanted, 2
         while name in self.tables:
             name, n = f"{wanted}_{n}", n + 1
         self.tables[name] = frame
+        if sources:  # remember which real sheets a joined table is made of
+            self._derived[name] = [b for s in sources for b in self._bases(s)]
         return name
+
+    def sources(self) -> list[str]:
+        """The sheets whose data fed this request's numbers, in first-use order."""
+        return list(self._used)
+
+
+MAX_SOURCE_LINE = 200
+NL2 = chr(10) * 2  # a blank line between the text and the source line
+
+
+def with_source(text: str, sources: list[str], limit: int) -> str:
+    """Appends a "Source: <sheet>" line, built from what the tools really read — never from
+    the model — so a saved/sent report says where its numbers came from. Skipped when no sheet
+    was used, or when the model already wrote its own source line."""
+    if not sources or re.search(r"(?im)^\s*_?source", text):
+        return text
+    line = ("Source: " + ", ".join(sources))[:MAX_SOURCE_LINE]
+    return text[: max(0, limit - len(line) - 2)].rstrip() + NL2 + line
 
 
 def _norm_key(series: pd.Series) -> pd.Series:
@@ -211,8 +248,8 @@ def _norm_key(series: pd.Series) -> pd.Series:
 def _join(
     tables: TableSet, left: str, right: str, left_on: str, right_on: str, how: str
 ) -> tuple[str, pd.DataFrame, dict[str, Any]]:
-    lname, ldf = tables.resolve(left)
-    rname, rdf = tables.resolve(right)
+    lname, ldf = tables.resolve(left, track=False)
+    rname, rdf = tables.resolve(right, track=False)
     if lname == rname:
         raise _ToolError("Pick two different tables to join")
     lcol, rcol = _resolve(ldf, left_on), _resolve(rdf, right_on)
@@ -302,6 +339,7 @@ def build_tools(
         title, body = notion_clean_title(title), notion_clean_body(body)
         if not title or not body:
             return _err("A Notion page needs both a title and some content")
+        body = with_source(body, tables.sources(), NOTION_MAX_BODY)
         return _ok(
             "Notion page drafted and shown to the user to review. It has NOT been saved.",
             draft={
@@ -319,6 +357,7 @@ def build_tools(
         text = slack_clean_message(re.split(r"<[a-zA-Z/!]", text, maxsplit=1)[0])
         if not text:
             return _err("A Slack message can't be empty")
+        text = with_source(text, tables.sources(), SLACK_MAX_MESSAGE)
         return _ok(
             "Slack message drafted and shown to the user to review. It has NOT been posted.",
             draft={
@@ -337,6 +376,7 @@ def build_tools(
         subject, body = clean_subject(subject), clean_body(body)
         if not subject or not body:
             return _err("A draft needs both a subject and a message body")
+        body = with_source(body, tables.sources(), EMAIL_MAX_BODY)
         # An address that isn't one valid recipient is dropped: the user types it on the card.
         recipient = parse_recipient(to) if to else None
         return _ok(
@@ -362,7 +402,7 @@ def build_tools(
             names = [table] if table else list(tables.tables)
             described = []
             for n in names:
-                name, df = tables.resolve(n)
+                name, df = tables.resolve(n, track=False)
                 head = df.head(3)
                 described.append(
                     {
@@ -389,7 +429,11 @@ def build_tools(
             wanted, merged, stats = _join(tables, left, right, left_on, right_on, how)
         except _ToolError as e:
             return _err(str(e))
-        name = tables.register(wanted, merged)
+        name = tables.register(
+            wanted,
+            merged,
+            sources=[tables.resolve(left, track=False)[0], tables.resolve(right, track=False)[0]],
+        )
         note = "" if stats["right_key_unique"] else " (right key repeats — rows may multiply)"
         return _ok(
             f"Joined {left} with {right} on {left_on} = {right_on}: {len(merged)} rows; "
