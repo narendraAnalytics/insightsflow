@@ -4,11 +4,12 @@ separate activity-log table: every event here is a row's own `created_at`."""
 
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.models.chat import ChatConversation, ChatMessage
 from app.db.models.connection import Connection
@@ -16,6 +17,16 @@ from app.db.models.data_source import DataSource
 
 ACTIVITY_LIMIT = 8
 DAILY_ACTIVITY_DAYS = 7
+
+# The chart's days are Indian days, matching the rest of the product (scheduled mail is IST
+# too). IST has no daylight saving, so a fixed +05:30 offset is exact.
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _ist_day(column: Any) -> ColumnElement[Any]:
+    """The IST calendar date of a timestamptz column, for GROUP BY."""
+    # A literal (not a bind parameter) so SELECT and GROUP BY render the identical expression.
+    return func.date(func.timezone(literal_column("'Asia/Kolkata'"), column))
 
 
 @dataclass
@@ -155,9 +166,9 @@ async def daily_activity(db: AsyncSession, user_id: uuid.UUID) -> list[DailyActi
     """Per day for the last DAILY_ACTIVITY_DAYS days: sources and questions CREATED that
     day (zero-filled — there's no activity-log table, so a quiet day is just an absence
     of rows, not a stored zero), and connections as a running total of what is connected."""
-    today = datetime.now(UTC).date()
+    today = datetime.now(IST).date()
     start_day = today - timedelta(days=DAILY_ACTIVITY_DAYS - 1)
-    since = datetime.combine(start_day, time.min, tzinfo=UTC)
+    since = datetime.combine(start_day, time.min, tzinfo=IST)
 
     # Connections are a RUNNING TOTAL (how many were connected as of each day), not
     # per-day creations: a connection made 6 days ago must still count today, and one
@@ -175,23 +186,23 @@ async def daily_activity(db: AsyncSession, user_id: uuid.UUID) -> list[DailyActi
     )
     connections_created = await _counts_by_day(
         db,
-        select(func.date(Connection.created_at), func.count())
+        select(_ist_day(Connection.created_at), func.count())
         .where(
             Connection.user_id == user_id,
             Connection.status == "connected",
             Connection.created_at >= since,
         )
-        .group_by(func.date(Connection.created_at)),
+        .group_by(_ist_day(Connection.created_at)),
     )
     sources = await _counts_by_day(
         db,
-        select(func.date(DataSource.created_at), func.count())
+        select(_ist_day(DataSource.created_at), func.count())
         .where(DataSource.user_id == user_id, DataSource.created_at >= since)
-        .group_by(func.date(DataSource.created_at)),
+        .group_by(_ist_day(DataSource.created_at)),
     )
     chats = await _counts_by_day(
         db,
-        select(func.date(ChatMessage.created_at), func.count())
+        select(_ist_day(ChatMessage.created_at), func.count())
         .select_from(ChatMessage)
         .join(ChatConversation, ChatConversation.id == ChatMessage.conversation_id)
         .where(
@@ -199,7 +210,7 @@ async def daily_activity(db: AsyncSession, user_id: uuid.UUID) -> list[DailyActi
             ChatMessage.role == "user",
             ChatMessage.created_at >= since,
         )
-        .group_by(func.date(ChatMessage.created_at)),
+        .group_by(_ist_day(ChatMessage.created_at)),
     )
 
     days: list[DailyActivity] = []
