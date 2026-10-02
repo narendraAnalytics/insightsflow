@@ -19,7 +19,7 @@ import {
 } from "@phosphor-icons/react";
 import NextLink from "next/link";
 import { GmailGlyph, NotionGlyph, SlackGlyph } from "@/components/site/brand-icons";
-import { useGmailConnection } from "@/hooks/use-gmail-connection";
+import { useGmailConnection, type GmailConnection } from "@/hooks/use-gmail-connection";
 import { documentAsSource, useDocuments } from "@/hooks/use-documents";
 import { useNotionConnection } from "@/hooks/use-notion-connection";
 import { useSlackConnection } from "@/hooks/use-slack-connection";
@@ -156,9 +156,12 @@ const scheduledIdOf = (d: Draft | null | undefined) => (d && isEmailDraft(d) ? (
 function AssistantMessage({
   message,
   draftActions,
+  gmailAccount,
 }: {
   message: ChatMessage;
   draftActions: DraftActions;
+  /** Which Gmail the chat reads, shown on the emails card when the user has several. */
+  gmailAccount?: string | null;
 }) {
   const cards = message.steps.filter(
     (s) => s.status === "done" && (s.draft || s.table || s.emails?.length || typeof s.value === "number")
@@ -212,7 +215,7 @@ function AssistantMessage({
               onCancelSchedule={() => draftActions.cancel(s.id, scheduledIdOf(s.draft))}
             />
           ) : s.emails?.length ? (
-            <EmailCard key={s.id} emails={s.emails} />
+            <EmailCard key={s.id} emails={s.emails} account={gmailAccount} />
           ) : s.table ? (
             <TableCard key={s.id} table={s.table} />
           ) : (
@@ -381,6 +384,10 @@ function SourcePicker({
   selected,
   gmailReady,
   gmailOn,
+  gmailAccounts,
+  gmailAccountId,
+  gmailAccountLabel,
+  onGmailAccountChange,
   locked,
   removed,
   disabled,
@@ -391,6 +398,12 @@ function SourcePicker({
   selected: string[];
   gmailReady: boolean;
   gmailOn: boolean;
+  /** Connected Gmail accounts that can be read (the choice only shows with 2 or more). */
+  gmailAccounts: GmailConnection[];
+  gmailAccountId: string | null;
+  /** The account's address, set only when the user has several (shown on the locked chip). */
+  gmailAccountLabel: string | null;
+  onGmailAccountChange: (id: string) => void;
   locked: boolean;
   removed: boolean;
   disabled: boolean;
@@ -425,7 +438,7 @@ function SourcePicker({
             style={{ boxShadow: raised("var(--flow-peach)") }}
           >
             <GmailGlyph className="size-4 shrink-0" />
-            Gmail
+            Gmail{gmailAccountLabel ? ` · ${gmailAccountLabel}` : ""}
           </span>
         )}
       </div>
@@ -492,6 +505,24 @@ function SourcePicker({
           </button>
         )}
       </div>
+      {gmailOn && gmailAccounts.length > 1 && (
+        <label className="flex flex-wrap items-center gap-2 px-1 font-(family-name:--font-zeyada) text-[21px] leading-none font-normal text-(--flow-ink)/80">
+          Read emails from
+          <select
+            value={gmailAccountId ?? ""}
+            disabled={disabled}
+            onChange={(e) => onGmailAccountChange(e.target.value)}
+            className="max-w-full cursor-pointer rounded-xl border border-(--flow-ink)/15 bg-(--flow-cream)/80 px-3 py-1.5 font-sans text-[14px] text-(--flow-ink) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--flow-magenta) disabled:opacity-60"
+          >
+            {gmailAccounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.external_account_email}
+                {a.is_default ? " (default)" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       {selected.length > 1 && (
         <p className="flex items-center gap-1.5 px-1 font-(family-name:--font-zeyada) text-[21px] leading-none text-(--flow-ink)/80">
           <Link weight="bold" className="size-3.5 shrink-0 text-(--flow-magenta)" />
@@ -556,7 +587,7 @@ export function InsightsChat() {
   const { connection: slackConnection } = useSlackConnection();
   const { connection: notionConnection } = useNotionConnection();
   const { connection, loading } = useGoogleSheetsConnection();
-  const { connection: gmailConnection, loading: gmailLoading } = useGmailConnection();
+  const { accounts: gmailAccounts, loading: gmailLoading } = useGmailConnection();
   const { documents, loading: documentsLoading } = useDocuments();
   // Ready documents are offered next to sheet tabs: same chips, same chat sources (the
   // backend resolves each id to a sheet tab or a document).
@@ -567,7 +598,12 @@ export function InsightsChat() {
     ],
     [connection, documents]
   );
-  const gmailReady = gmailConnection?.status === "connected" && gmailConnection.can_read_mail;
+  // Accounts the agent can read mail from (connected, with the read permission).
+  const readableGmail = useMemo(
+    () => gmailAccounts.filter((a) => a.status === "connected" && a.can_read_mail),
+    [gmailAccounts]
+  );
+  const gmailReady = readableGmail.length > 0;
   const ready = sources.length > 0 || gmailReady;
   const {
     messages,
@@ -580,6 +616,8 @@ export function InsightsChat() {
     setSourceIds,
     useGmail,
     setUseGmail,
+    gmailConnectionId,
+    setGmailConnectionId,
     sourceRemoved,
     send,
     draftActions,
@@ -588,6 +626,21 @@ export function InsightsChat() {
     openConversation,
     removeConversation,
   } = useInsightsChat(ready, sources, gmailReady);
+
+  // A new chat reads one specific account: keep the choice valid, defaulting to the user's
+  // default account when it can be read, else the first readable one.
+  useEffect(() => {
+    if (conversationId !== null || readableGmail.length === 0) return;
+    if (gmailConnectionId && readableGmail.some((a) => a.id === gmailConnectionId)) return;
+    setGmailConnectionId((readableGmail.find((a) => a.is_default) ?? readableGmail[0]).id);
+  }, [conversationId, readableGmail, gmailConnectionId, setGmailConnectionId]);
+
+  // The account a chat reads, for labels. A saved chat with no stored account used the default.
+  const chatGmail =
+    gmailAccounts.find((a) => a.id === gmailConnectionId) ??
+    gmailAccounts.find((a) => a.is_default) ??
+    gmailAccounts[0];
+  const gmailAccountLabel = gmailAccounts.length > 1 ? (chatGmail?.external_account_email ?? null) : null;
   const [historyOpen, setHistoryOpen] = useState(false);
 
   const [draft, setDraft] = useState("");
@@ -697,6 +750,10 @@ export function InsightsChat() {
         gmailReady={gmailReady}
         gmailOn={useGmail}
         onGmailChange={setUseGmail}
+        gmailAccounts={readableGmail}
+        gmailAccountId={gmailConnectionId}
+        gmailAccountLabel={gmailAccountLabel}
+        onGmailAccountChange={setGmailConnectionId}
         locked={conversationId !== null}
         removed={sourceRemoved}
         disabled={busy}
@@ -774,7 +831,7 @@ export function InsightsChat() {
         ) : (
           <>
             {messages.map((m) =>
-              m.role === "user" ? <UserMessage key={m.id} message={m} /> : <AssistantMessage key={m.id} message={m} draftActions={draftActions} />
+              m.role === "user" ? <UserMessage key={m.id} message={m} /> : <AssistantMessage key={m.id} message={m} draftActions={draftActions} gmailAccount={gmailAccountLabel} />
             )}
           </>
         )}

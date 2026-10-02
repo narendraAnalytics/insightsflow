@@ -129,6 +129,7 @@ async def load_sheet_context(
     clerk_user_id: str,
     source_ids: list[uuid.UUID],
     use_gmail: bool = False,
+    gmail_connection_id: uuid.UUID | None = None,
 ) -> SheetContext:
     """All DB + Google I/O happens here, before streaming starts, so failures
     surface as normal HTTP errors and the SSE generator never touches the session.
@@ -142,7 +143,7 @@ async def load_sheet_context(
 
     gmail_token, can_send = None, False
     if use_gmail:
-        gmail_token, can_send = await _gmail_access(session, clerk_user_id)
+        gmail_token, can_send = await _gmail_access(session, clerk_user_id, gmail_connection_id)
         if gmail_token is None:
             raise GmailNotReadable(
                 "Gmail isn't connected with permission to read email. "
@@ -216,12 +217,16 @@ async def _slack_channel(session: AsyncSession, clerk_user_id: str) -> dict[str,
         return None
 
 
-async def _gmail_access(session: AsyncSession, clerk_user_id: str) -> tuple[str | None, bool]:
-    """(access token, may-send) — the token only if Gmail is connected WITH the read
-    scope. Never blocks sheet Q&A: any failure (not connected, revoked, expired
-    refresh token) just means the email tools aren't offered."""
+async def _gmail_access(
+    session: AsyncSession, clerk_user_id: str, connection_id: uuid.UUID | None = None
+) -> tuple[str | None, bool]:
+    """(access token, may-send) — the token only if the chosen Gmail account (else the default
+    one) is connected WITH the read scope. Never blocks sheet Q&A: any failure (not
+    connected, revoked, expired refresh token) just means the email tools aren't offered."""
     try:
-        connection = await connection_service.get_connection(session, clerk_user_id, "gmail")
+        connection = await connection_service.get_connection(
+            session, clerk_user_id, "gmail", connection_id
+        )
         if connection.status != "connected" or not google_gmail.has_read_scope(connection.scopes):
             return None, False
         token = await connection_service.get_valid_access_token(session, connection)

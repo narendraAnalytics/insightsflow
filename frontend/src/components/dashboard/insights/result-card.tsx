@@ -155,7 +155,7 @@ function emailWhen(iso: string | null): string {
 }
 
 /** The user's latest emails as a readable list: who, what, and when. */
-export function EmailCard({ emails }: { emails: EmailItem[] }) {
+export function EmailCard({ emails, account }: { emails: EmailItem[]; account?: string | null }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -167,6 +167,7 @@ export function EmailCard({ emails }: { emails: EmailItem[] }) {
       <p className="px-4 pt-3.5 pb-1 font-(family-name:--font-zeyada) text-[24px] leading-none font-normal text-(--flow-magenta)">
         Your latest emails
       </p>
+      {account && <p className="px-4 text-[12.5px] text-(--flow-ink)/65">from {account}</p>}
       <ul>
         {emails.map((mail, i) => {
           const accent = barAccents[i % barAccents.length];

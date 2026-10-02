@@ -24,6 +24,16 @@ export function CreditsCard() {
         <p className="mt-1 text-[19px] font-(family-name:--font-zeyada) leading-snug font-normal text-(--flow-ink)/70">
           1 ₹ = 1 credit. {connectCost} to connect an app, {questionCost} per AI question.
         </p>
+        {credits !== null && credits < connectCost && (
+          <p
+            role="status"
+            className="mt-2 rounded-xl bg-(--flow-amber)/45 px-3 py-1.5 text-[19px] font-(family-name:--font-zeyada) leading-snug font-normal text-(--flow-ink)"
+          >
+            {credits < questionCost
+              ? "You're out of credits. Buy more to ask questions or connect apps."
+              : `Low on credits. A new connection needs ${connectCost}; you can still ask ${Math.floor(credits / questionCost)} question${Math.floor(credits / questionCost) === 1 ? "" : "s"}.`}
+          </p>
+        )}
       </div>
       <button
         type="button"

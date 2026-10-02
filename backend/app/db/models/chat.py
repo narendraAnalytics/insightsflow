@@ -23,6 +23,11 @@ class ChatConversation(Base):
     title: Mapped[str] = mapped_column(String(120))
     # The chat may read the user's recent emails (Gmail with the read scope).
     uses_gmail: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # Which connected Gmail account the chat reads. NULL = the user's default account (also
+    # what a chat falls back to if that account is later disconnected).
+    gmail_connection_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("connections.id", ondelete="SET NULL")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

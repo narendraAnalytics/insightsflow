@@ -35,6 +35,8 @@ class AskRequest(BaseModel):
     data_source_ids: list[uuid.UUID] = Field(default_factory=list, max_length=5)
     # A new chat may also read the user's recent emails (needs Gmail + read scope).
     use_gmail: bool = False
+    # Which connected Gmail account a NEW chat reads; None = the user's default account.
+    gmail_connection_id: uuid.UUID | None = None
 
 
 class SuggestionsResponse(BaseModel):
@@ -47,6 +49,7 @@ class ConversationOut(BaseModel):
     title: str
     data_source_ids: list[uuid.UUID]
     uses_gmail: bool
+    gmail_connection_id: uuid.UUID | None = None
     updated_at: datetime
 
 
@@ -64,6 +67,7 @@ class ConversationDetail(BaseModel):
     title: str
     data_source_ids: list[uuid.UUID]
     uses_gmail: bool
+    gmail_connection_id: uuid.UUID | None = None
     messages: list[MessageOut]
 
 
@@ -93,6 +97,7 @@ async def list_conversations(
             title=c.title,
             data_source_ids=sources[c.id],
             uses_gmail=c.uses_gmail,
+            gmail_connection_id=c.gmail_connection_id,
             updated_at=c.updated_at,
         )
         for c in rows
@@ -114,6 +119,7 @@ async def get_conversation(
         title=conversation.title,
         data_source_ids=sources[conversation.id],
         uses_gmail=conversation.uses_gmail,
+        gmail_connection_id=conversation.gmail_connection_id,
         messages=[
             MessageOut(
                 id=m.id,
@@ -295,6 +301,7 @@ async def ask(
         else body.data_source_ids
     )
     use_gmail = existing.uses_gmail if existing else body.use_gmail
+    gmail_id = existing.gmail_connection_id if existing else body.gmail_connection_id
     if not source_ids and not use_gmail:
         raise AppError(
             "This chat's sheets were removed. Start a new chat to ask about another sheet."
@@ -304,9 +311,11 @@ async def ask(
         )
 
     # Load the sheets first so a missing/inaccessible one never leaves an empty chat behind.
-    ctx = await insights_service.load_sheet_context(db, principal.user_id, source_ids, use_gmail)
+    ctx = await insights_service.load_sheet_context(
+        db, principal.user_id, source_ids, use_gmail, gmail_id
+    )
     conversation = existing or await chat_service.create_conversation(
-        db, principal.user_id, body.question, source_ids, use_gmail
+        db, principal.user_id, body.question, source_ids, use_gmail, gmail_id
     )
     history = await chat_service.history_for(db, conversation.id)
     await chat_service.add_message(db, conversation.id, "user", body.question)
