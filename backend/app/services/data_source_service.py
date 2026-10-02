@@ -158,7 +158,8 @@ async def refresh_stale_sources(session: AsyncSession, clerk_user_id: str) -> li
 
     try:
         _, token = await _connection_and_token(session, clerk_user_id)
-    except NotFoundError:
+    except (NotFoundError, connection_service.ConnectionExpired):
+        # Expired access is flagged on the connection (status "expired"); the page still loads.
         return sources
 
     gate = asyncio.Semaphore(_REFRESH_CONCURRENCY)

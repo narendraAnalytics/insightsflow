@@ -7,17 +7,23 @@ import asyncio
 from datetime import UTC, datetime
 
 import structlog
+from google.auth.exceptions import RefreshError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crypto import decrypt_token, encrypt_token
-from app.core.errors import NotFoundError
+from app.core.errors import AppError, NotFoundError
 from app.db.models.connection import Connection
 from app.db.models.user import User
 from app.integrations.google import gmail as google_gmail
 from app.integrations.google import sheets as google_sheets
 
 logger = structlog.get_logger(__name__)
+
+
+class ConnectionExpired(AppError):
+    status_code = 409
+    code = "connection_expired"
 
 
 async def get_or_create_user(session: AsyncSession, clerk_user_id: str) -> User:
@@ -119,9 +125,20 @@ async def get_valid_access_token(session: AsyncSession, connection: Connection) 
     if connection.refresh_token_enc is None:
         raise NotFoundError(f"The {connection.provider} connection has expired. Reconnect it.")
     refresh_token = decrypt_token(connection.refresh_token_enc, connection.key_version)
-    access_token, expires_at = await asyncio.to_thread(
-        google_sheets.refresh_access_token, refresh_token, connection.scopes.split(",")
-    )
+    try:
+        access_token, expires_at = await asyncio.to_thread(
+            google_sheets.refresh_access_token, refresh_token, connection.scopes.split(",")
+        )
+    except RefreshError:
+        # Google refused the refresh token (revoked, or expired: while the OAuth app is in
+        # "Testing" they last 7 days). Mark it so the UI offers Connect again; reconnecting
+        # reuses this row, so chats and sheets stay attached.
+        logger.warning("google_refresh_rejected", provider=connection.provider)
+        connection.status = "expired"
+        await session.commit()
+        raise ConnectionExpired(
+            f"Your {connection.provider.replace('_', ' ')} access expired. Reconnect it."
+        ) from None
     access_enc, version = encrypt_token(access_token)
     connection.access_token_enc = access_enc
     connection.key_version = version
