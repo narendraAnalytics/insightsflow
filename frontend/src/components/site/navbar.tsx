@@ -143,10 +143,6 @@ export function Navbar() {
               {displayName}
               <BackendDot />
             </span>
-            <a href="/dashboard" className={cn(primaryButtonClass, "min-h-10 px-5 py-2 text-[14px]")}>
-              Dashboard
-              <ArrowUpRight weight="bold" className="size-3.5" />
-            </a>
             <span className="pl-1">
               <UserButton />
             </span>
