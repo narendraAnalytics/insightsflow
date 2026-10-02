@@ -9,6 +9,8 @@ import { EASE_OUT } from "@/lib/motion";
 import { LogoVideo } from "@/components/site/logo-video";
 import { Magnetic, primaryButtonClass } from "@/components/site/primitives";
 import { useBackendMe } from "@/hooks/use-backend-me";
+import { useCreditBalance } from "@/hooks/use-credit-balance";
+import { CreditsPill } from "@/components/billing/credits-pill";
 
 const links = [
   { label: "Product", id: "product" },
@@ -36,6 +38,15 @@ function useActiveSection() {
     return () => observer.disconnect();
   }, []);
   return activeId;
+}
+
+function NavCredits() {
+  const credits = useCreditBalance();
+  return (
+    <a href="/dashboard" className="transition-transform hover:scale-[1.04]">
+      <CreditsPill credits={credits} />
+    </a>
+  );
 }
 
 function BackendDot() {
@@ -131,6 +142,7 @@ export function Navbar() {
             </Magnetic>
           </Show>
           <Show when="signed-in">
+            <NavCredits />
             <span className="flex items-center gap-1.5 px-2 text-[14px] font-semibold text-(--flow-ink)">
               {displayName}
               <BackendDot />

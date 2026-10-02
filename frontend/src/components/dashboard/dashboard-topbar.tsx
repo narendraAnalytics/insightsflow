@@ -2,9 +2,12 @@
 
 import { Bell, MagnifyingGlass } from "@phosphor-icons/react";
 import { useUser } from "@clerk/nextjs";
+import { CreditsPill } from "@/components/billing/credits-pill";
+import { useCredits } from "@/components/billing/credits-provider";
 
 export function DashboardTopbar() {
   const { user } = useUser();
+  const { credits, openBuy } = useCredits();
   const displayName = user?.fullName ?? user?.username ?? user?.firstName ?? "there";
 
   return (
@@ -26,6 +29,10 @@ export function DashboardTopbar() {
           className="relative flex size-10 items-center justify-center rounded-full text-(--flow-ink)/70 transition-colors hover:bg-(--flow-ink)/6"
         >
           <Bell weight="bold" className="size-[19px]" />
+        </button>
+
+        <button type="button" onClick={openBuy} title="Buy credits" className="rounded-full transition-transform hover:scale-[1.04] active:scale-[0.97]">
+          <CreditsPill credits={credits} />
         </button>
 
         <span className="text-gradient-flow pl-1 font-(family-name:--font-zeyada) text-[30px] leading-none font-normal whitespace-nowrap">
