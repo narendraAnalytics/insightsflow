@@ -328,6 +328,18 @@ export function SlackCard() {
             In AI Insights, ask &ldquo;post this to Slack&rdquo; and review the draft before it goes out. To add another
             workspace, choose it from the menu at the top right of Slack&apos;s page (it must be one you belong to).
           </p>
+          <p className={`${zeyada} text-[20px] leading-snug text-(--flow-ink)/70`}>
+            Don&apos;t have a second Slack workspace yet? First{" "}
+            <a
+              href="https://slack.com/get-started#/createnew"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-(--flow-magenta) underline underline-offset-2"
+            >
+              create one (free)
+            </a>{" "}
+            with the email you want to use, then come back and click Connect another workspace.
+          </p>
           <div>
             <button
               type="button"
