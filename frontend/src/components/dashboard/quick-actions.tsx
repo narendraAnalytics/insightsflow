@@ -24,7 +24,7 @@ const actions = [
     hint: "Add a file",
     icon: "https://res.cloudinary.com/dkqbzwicr/image/upload/v1790427712/DocumentUpload_lslobk.png",
     accent: "var(--flow-cyan)",
-    href: "/dashboard/integrations#documents",
+    href: "/dashboard/documents",
   },
   {
     label: "Ask AI",
