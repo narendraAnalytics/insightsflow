@@ -5,7 +5,7 @@ import { TaskOverviewDonut } from "@/components/dashboard/task-overview-donut";
 import { QuickActions } from "@/components/dashboard/quick-actions";
 import { RecentActivity } from "@/components/dashboard/recent-activity";
 import { ProjectsTable } from "@/components/dashboard/projects-table";
-import { UpgradeCard, MotivationCard } from "@/components/dashboard/promo-cards";
+import { CreditsCard, MotivationCard } from "@/components/dashboard/promo-cards";
 
 export default function DashboardPage() {
   return (
@@ -24,7 +24,7 @@ export default function DashboardPage() {
         <QuickActions />
         <RecentActivity />
         <div className="flex flex-1 flex-col gap-4">
-          <UpgradeCard />
+          <CreditsCard />
           <MotivationCard />
         </div>
       </div>

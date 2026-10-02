@@ -89,6 +89,12 @@ class Settings(BaseSettings):
     notion_redirect_uri: str | None = None
     notion_version: str = "2026-03-11"
 
+    # Razorpay (credits top-ups). Test keys (rzp_test_...) now, live keys later —
+    # no code change. The webhook secret is the one set on the dashboard webhook.
+    razorpay_key_id: str | None = None
+    razorpay_key_secret: str | None = None
+    razorpay_webhook_secret: str | None = None
+
     # Shared secret for the once-a-minute external pinger that calls
     # POST /api/v1/internal/email/run-due (sends due scheduled emails). Use a
     # long random string (32+ chars). Unset = the endpoint is disabled (503).

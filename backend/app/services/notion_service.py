@@ -23,7 +23,7 @@ from app.core.errors import AppError, NotFoundError
 from app.core.oauth_state import sign_state
 from app.db.models.connection import Connection
 from app.integrations import notion
-from app.services import chat_service, connection_service, email_service
+from app.services import chat_service, connection_service, credit_service, email_service
 
 logger = structlog.get_logger(__name__)
 
@@ -59,6 +59,9 @@ async def complete_connect(session: AsyncSession, clerk_user_id: str, code: str)
     if connection is None:
         connection = Connection(user_id=user.id, provider=PROVIDER)
         session.add(connection)
+        await credit_service.spend(
+            session, user.id, credit_service.CONNECT_COST, f"connect_{PROVIDER}", commit=False
+        )
 
     previous = connection.config or {}
     config: dict[str, Any] = {

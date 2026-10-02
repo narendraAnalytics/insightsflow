@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { apiFetch } from "@/lib/api";
+import { emitCreditsChanged } from "@/lib/credits-events";
 
 /** One spreadsheet tab the user can ask questions about. */
 export type DataSource = {
@@ -88,6 +89,7 @@ export function useGoogleSheetsConnection() {
         method: "POST",
         body: { file_id: fileId, tab_title: tabTitle ?? null },
       });
+      emitCreditsChanged(); // a new sheet/tab costs credits (re-adding an existing one is free)
       setConnection((prev) => {
         if (!prev) return prev;
         const rest = prev.sources.filter((s) => s.id !== source.id);

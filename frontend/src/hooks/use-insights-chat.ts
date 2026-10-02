@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { apiFetch } from "@/lib/api";
+import { emitCreditsChanged, emitCreditsNeeded } from "@/lib/credits-events";
 import type { DataSource } from "@/hooks/use-google-sheets-connection";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -264,8 +265,11 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[], gmailRe
           signal: controller.signal,
         });
         if (!res.ok || !res.body) {
+          if (res.status === 402) emitCreditsNeeded();
           const message =
-            res.status === 404
+            res.status === 402
+              ? "You're out of credits. Buy more to ask another question."
+              : res.status === 404
               ? "Connect a Google Sheet and pick a spreadsheet first."
               : res.status === 503
                 ? "The AI model isn't configured yet."
@@ -327,6 +331,7 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[], gmailRe
         if (frame) cancelAnimationFrame(frame);
         flush();
         patchAssistant(assistantId, (m) => ({ ...m, status: "done" }));
+        emitCreditsChanged(); // an answer costs credits; refresh the balance
       } catch (err) {
         if (frame) cancelAnimationFrame(frame);
         flush();

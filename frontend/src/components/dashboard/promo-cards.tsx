@@ -1,8 +1,10 @@
 "use client";
 
-import { ArrowCircleRight, ArrowRight, Sparkle } from "@phosphor-icons/react";
+import { ArrowCircleRight, ArrowRight, Coins } from "@phosphor-icons/react";
+import { useCredits } from "@/components/billing/credits-provider";
 
-export function UpgradeCard() {
+export function CreditsCard() {
+  const { credits, questionCost, connectCost, openBuy } = useCredits();
   return (
     <div
       className="relative flex flex-col gap-3 overflow-hidden rounded-2xl p-5"
@@ -10,16 +12,25 @@ export function UpgradeCard() {
         backgroundImage: "linear-gradient(150deg, var(--flow-peach), var(--flow-pink) 60%, var(--flow-lavender))",
       }}
     >
-      <Sparkle weight="fill" className="size-5 text-(--flow-cream)" />
+      <Coins weight="fill" className="size-5 text-(--flow-cream)" />
       <div>
-        <p className="text-[26px] font-(family-name:--font-zeyada) leading-none font-normal text-(--flow-ink)">Upgrade to Pro</p>
-        <p className="mt-1 text-[19px] font-(family-name:--font-zeyada) leading-snug font-normal text-(--flow-ink)/70">Unlock more power with advanced AI features.</p>
+        <p className="text-[26px] font-(family-name:--font-zeyada) leading-none font-normal text-(--flow-ink)">Your credits</p>
+        <p
+          className="mt-1 text-[56px] font-(family-name:--font-zeyada) leading-none font-normal text-(--flow-magenta)"
+          aria-live="polite"
+        >
+          {credits === null ? "–" : credits.toLocaleString("en-IN")}
+        </p>
+        <p className="mt-1 text-[19px] font-(family-name:--font-zeyada) leading-snug font-normal text-(--flow-ink)/70">
+          1 ₹ = 1 credit. {connectCost} to connect an app, {questionCost} per AI question.
+        </p>
       </div>
       <button
         type="button"
+        onClick={openBuy}
         className="glass-panel mt-1 inline-flex w-fit items-center gap-1.5 rounded-full px-4 py-2 text-[20px] font-(family-name:--font-zeyada) leading-none font-normal text-(--flow-ink)"
       >
-        Upgrade Now
+        Buy credits
         <ArrowRight weight="bold" className="size-3.5" />
       </button>
     </div>

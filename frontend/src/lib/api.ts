@@ -1,3 +1,5 @@
+import { emitCreditsNeeded } from "@/lib/credits-events";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 /** An HTTP error from the backend. `message` is the server's own explanation
@@ -39,6 +41,7 @@ export async function apiFetch<T>(
     } catch {
       /* non-JSON error body — keep the generic message */
     }
+    if (res.status === 402 && code === "insufficient_credits") emitCreditsNeeded();
     throw new ApiError(message, res.status, code);
   }
   if (res.status === 204) {

@@ -16,6 +16,7 @@ from app.core.security import Principal, get_current_principal
 from app.db.session import get_db
 from app.services import (
     chat_service,
+    credit_service,
     email_service,
     insights_service,
     notion_service,
@@ -268,6 +269,8 @@ async def ask(
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
+    # Before anything is created: an empty balance must not leave an empty chat behind.
+    await credit_service.require_credits(db, principal.user_id, credit_service.QUESTION_COST)
     existing = (
         await chat_service.get_owned_conversation(db, principal.user_id, body.conversation_id)
         if body.conversation_id
@@ -297,7 +300,7 @@ async def ask(
     await chat_service.add_message(db, conversation.id, "user", body.question)
     return StreamingResponse(
         insights_service.stream_answer(
-            ctx, body.question, history, conversation.id, conversation.title
+            ctx, body.question, history, conversation.id, conversation.title, principal.user_id
         ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},

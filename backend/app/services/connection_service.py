@@ -72,6 +72,15 @@ async def complete_google_connect(
     if connection is None:
         connection = Connection(user_id=user.id, provider=provider)
         session.add(connection)
+        if provider != "google_sheets":
+            # Sheets are charged per sheet/tab added, not for the OAuth itself.
+            # Local import: credit_service imports this module. The debit shares the
+            # commit below, so a failed save never costs credits.
+            from app.services import credit_service
+
+            await credit_service.spend(
+                session, user.id, credit_service.CONNECT_COST, f"connect_{provider}", commit=False
+            )
 
     connection.status = "connected"
     connection.external_account_email = tokens.email

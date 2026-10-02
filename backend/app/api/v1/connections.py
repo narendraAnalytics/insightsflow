@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.errors import NotFoundError
 from app.core.oauth_state import verify_state
 from app.core.security import Principal, get_current_principal
 from app.db.models.connection import Connection
@@ -19,7 +20,13 @@ from app.db.models.data_source import DataSource
 from app.db.session import get_db
 from app.integrations import slack
 from app.integrations.google import gmail as google_gmail
-from app.services import connection_service, data_source_service, notion_service, slack_service
+from app.services import (
+    connection_service,
+    credit_service,
+    data_source_service,
+    notion_service,
+    slack_service,
+)
 
 router = APIRouter(prefix="/connections", tags=["connections"])
 
@@ -212,10 +219,21 @@ async def google_disconnect(
     await connection_service.disconnect(db, principal.user_id)
 
 
+async def _require_credits_if_new(db: AsyncSession, clerk_user_id: str, provider: str) -> None:
+    """A first connect of `provider` costs credits; reconnecting an existing one is free.
+    Checked before OAuth starts so the user isn't sent off to consent and then refused."""
+    try:
+        await connection_service.get_connection(db, clerk_user_id, provider)
+    except NotFoundError:
+        await credit_service.require_credits(db, clerk_user_id, credit_service.CONNECT_COST)
+
+
 @router.get("/gmail/connect-url", response_model=ConnectUrlResponse)
 async def gmail_connect_url(
     principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
 ) -> ConnectUrlResponse:
+    await _require_credits_if_new(db, principal.user_id, "gmail")
     url = await connection_service.start_google_connect(principal.user_id, "gmail")
     return ConnectUrlResponse(url=url)
 
@@ -233,9 +251,12 @@ async def gmail_callback(
     if error or not code:
         return RedirectResponse(url=f"{base}?gmail_error=denied")
     clerk_user_id, code_verifier = verify_state(state)
-    await connection_service.complete_google_connect(
-        db, clerk_user_id, code, code_verifier, "gmail"
-    )
+    try:
+        await connection_service.complete_google_connect(
+            db, clerk_user_id, code, code_verifier, "gmail"
+        )
+    except credit_service.InsufficientCredits:
+        return RedirectResponse(url=f"{base}?billing=insufficient")
     return RedirectResponse(url=f"{base}?connected=gmail")
 
 
@@ -264,7 +285,9 @@ class SlackChannelChoice(BaseModel):
 @router.get("/slack/connect-url", response_model=ConnectUrlResponse)
 async def slack_connect_url(
     principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
 ) -> ConnectUrlResponse:
+    await _require_credits_if_new(db, principal.user_id, "slack")
     return ConnectUrlResponse(url=slack_service.start_connect(principal.user_id))
 
 
@@ -280,7 +303,10 @@ async def slack_callback(
     if error or not code:
         return RedirectResponse(url=f"{base}?slack_error=denied")
     clerk_user_id, _ = verify_state(state)
-    await slack_service.complete_connect(db, clerk_user_id, code)
+    try:
+        await slack_service.complete_connect(db, clerk_user_id, code)
+    except credit_service.InsufficientCredits:
+        return RedirectResponse(url=f"{base}?billing=insufficient")
     return RedirectResponse(url=f"{base}?connected=slack")
 
 
@@ -328,7 +354,9 @@ class NotionPageChoice(BaseModel):
 @router.get("/notion/connect-url", response_model=ConnectUrlResponse)
 async def notion_connect_url(
     principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
 ) -> ConnectUrlResponse:
+    await _require_credits_if_new(db, principal.user_id, "notion")
     return ConnectUrlResponse(url=notion_service.start_connect(principal.user_id))
 
 
@@ -344,7 +372,10 @@ async def notion_callback(
     if error or not code:
         return RedirectResponse(url=f"{base}?notion_error=denied")
     clerk_user_id, _ = verify_state(state)
-    await notion_service.complete_connect(db, clerk_user_id, code)
+    try:
+        await notion_service.complete_connect(db, clerk_user_id, code)
+    except credit_service.InsufficientCredits:
+        return RedirectResponse(url=f"{base}?billing=insufficient")
     return RedirectResponse(url=f"{base}?connected=notion")
 
 

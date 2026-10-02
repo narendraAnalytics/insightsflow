@@ -67,3 +67,9 @@ services:
         value: https://insightsflow-zeb7.onrender.com/api/v1/connections/notion/callback
       - key: NOTION_VERSION # pinned Notion-Version header
         value: "2026-03-11"
+      - key: RAZORPAY_KEY_ID # test key now (rzp_test_...), live key later; the id is public, the secret is not
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET # the secret set on the Razorpay webhook for <render-url>/api/v1/webhooks/razorpay (event order.paid)
+        sync: false

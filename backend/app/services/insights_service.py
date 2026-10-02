@@ -31,6 +31,7 @@ from app.integrations.google import sheets as google_sheets
 from app.services import (
     chat_service,
     connection_service,
+    credit_service,
     data_source_service,
     document_service,
     notion_service,
@@ -357,6 +358,24 @@ def _tool_result_event(msg: ToolMessage) -> dict[str, Any]:
     }
 
 
+async def _charge_question(clerk_user_id: str, conversation_id: uuid.UUID) -> None:
+    """Debits the cost of one answer, only after it completed (failed runs are free).
+    Own session, like _persist_assistant. /ask already checked the balance, so a
+    failure here (a concurrent spend) just means this one answer went uncharged."""
+    try:
+        async with get_sessionmaker()() as session:
+            user = await connection_service.get_or_create_user(session, clerk_user_id)
+            await credit_service.spend(
+                session,
+                user.id,
+                credit_service.QUESTION_COST,
+                "ai_question",
+                str(conversation_id),
+            )
+    except Exception:
+        logger.warning("question_charge_failed", conversation_id=str(conversation_id))
+
+
 async def _persist_assistant(
     conversation_id: uuid.UUID, content: str, steps: list[dict[str, Any]], error: str | None
 ) -> None:
@@ -388,6 +407,7 @@ async def stream_answer(
     history: list[dict[str, str]],
     conversation_id: uuid.UUID,
     title: str,
+    clerk_user_id: str,
 ) -> AsyncIterator[str]:
     """Yields SSE-formatted strings: conversation, thinking, tool_start,
     tool_result, token, done, error. Whatever was streamed is saved to Neon
@@ -472,6 +492,7 @@ async def stream_answer(
                                             draft=result.get("draft"),
                                         )
                                 yield _sse("tool_result", result)
+        await _charge_question(clerk_user_id, conversation_id)
         yield _sse("done", {})
     except TimeoutError:
         error = "That took too long. Try a simpler question."

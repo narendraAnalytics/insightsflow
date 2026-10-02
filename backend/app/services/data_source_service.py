@@ -15,7 +15,7 @@ from app.core.errors import AppError, NotFoundError
 from app.db.models.connection import Connection
 from app.db.models.data_source import DataSource
 from app.integrations.google import sheets as google_sheets
-from app.services import connection_service
+from app.services import connection_service, credit_service
 
 logger = structlog.get_logger(__name__)
 
@@ -116,6 +116,14 @@ async def add_source(
     )
     _apply_metadata(source, meta)
     session.add(source)
+    # Same commit as the source: a failed save (or a lost race) costs nothing.
+    await credit_service.spend(
+        session,
+        connection.user_id,
+        credit_service.CONNECT_COST,
+        "connect_google_sheets",
+        commit=False,
+    )
     try:
         await session.commit()
     except IntegrityError:
