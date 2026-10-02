@@ -14,7 +14,6 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crypto import decrypt_token, encrypt_token
@@ -55,12 +54,21 @@ async def complete_connect(session: AsyncSession, clerk_user_id: str, code: str)
     install = await asyncio.to_thread(slack.exchange_code, code)
     token_enc, key_version = encrypt_token(install.bot_token)
 
-    result = await session.execute(
-        select(Connection).where(Connection.user_id == user.id, Connection.provider == PROVIDER)
+    existing = await connection_service.provider_connections(session, user.id, PROVIDER)
+    # One connection per Slack workspace: installing into a workspace that's already
+    # connected refreshes it (free); a different workspace is added and charged.
+    connection = next(
+        (c for c in existing if (c.config or {}).get("team_id") == install.team_id), None
     )
-    connection = result.scalar_one_or_none()
     if connection is None:
+        if len(existing) >= connection_service.MAX_ACCOUNTS_PER_PROVIDER:
+            raise connection_service.TooManyAccounts(
+                f"You can connect up to {connection_service.MAX_ACCOUNTS_PER_PROVIDER} Slack "
+                "workspaces. Disconnect one first."
+            )
         connection = Connection(user_id=user.id, provider=PROVIDER)
+        if not existing:
+            connection.config = {"default": True}
         # Debit BEFORE adding the row: spend() flushes, and a new connection can't be flushed
         # until its (NOT NULL) token fields are filled in below. Both land in one commit.
         await credit_service.spend(
@@ -70,11 +78,10 @@ async def complete_connect(session: AsyncSession, clerk_user_id: str, code: str)
 
     previous = connection.config or {}
     config: dict[str, Any] = {"team_id": install.team_id, "team_name": install.team_name}
-    # Reconnecting to the SAME workspace keeps the chosen channel; a different one resets it.
-    if previous.get("team_id") == install.team_id:
-        for key in ("channel_id", "channel_name"):
-            if previous.get(key):
-                config[key] = previous[key]
+    # Reconnecting the SAME workspace keeps its chosen channel and default flag.
+    for key in ("channel_id", "channel_name", "default"):
+        if previous.get(key):
+            config[key] = previous[key]
 
     connection.status = "connected"
     connection.external_account_email = install.team_name  # shown as the account label
@@ -91,10 +98,13 @@ async def complete_connect(session: AsyncSession, clerk_user_id: str, code: str)
 
 
 async def _connection_and_token(
-    session: AsyncSession, clerk_user_id: str
+    session: AsyncSession, clerk_user_id: str, connection_id: uuid.UUID | None = None
 ) -> tuple[Connection, str]:
+    """The workspace with `connection_id`, else the user's default one."""
     try:
-        connection = await connection_service.get_connection(session, clerk_user_id, PROVIDER)
+        connection = await connection_service.get_connection(
+            session, clerk_user_id, PROVIDER, connection_id
+        )
     except NotFoundError:
         raise SlackNotConnected("Connect Slack on the Integrations page first.") from None
     if connection.status != "connected":
@@ -102,15 +112,22 @@ async def _connection_and_token(
     return connection, decrypt_token(connection.access_token_enc, connection.key_version)
 
 
-async def list_channels(session: AsyncSession, clerk_user_id: str) -> list[slack.SlackChannel]:
-    _, token = await _connection_and_token(session, clerk_user_id)
+async def list_channels(
+    session: AsyncSession, clerk_user_id: str, connection_id: uuid.UUID | None = None
+) -> list[slack.SlackChannel]:
+    _, token = await _connection_and_token(session, clerk_user_id, connection_id)
     return await asyncio.to_thread(slack.list_channels, token)
 
 
-async def set_channel(session: AsyncSession, clerk_user_id: str, channel_id: str) -> dict[str, Any]:
-    """Saves the default channel. Only a channel that really is in the user's workspace
+async def set_channel(
+    session: AsyncSession,
+    clerk_user_id: str,
+    channel_id: str,
+    connection_id: uuid.UUID | None = None,
+) -> dict[str, Any]:
+    """Saves a workspace's default channel. Only a channel that really is in that workspace's
     list can be chosen, and its name is taken from Slack, not from the client."""
-    connection, token = await _connection_and_token(session, clerk_user_id)
+    connection, token = await _connection_and_token(session, clerk_user_id, connection_id)
     channels = await asyncio.to_thread(slack.list_channels, token)
     chosen = next((c for c in channels if c.id == channel_id), None)
     if chosen is None:
@@ -138,15 +155,19 @@ async def default_channel(session: AsyncSession, clerk_user_id: str) -> dict[str
     return {"id": cfg["channel_id"], "name": cfg.get("channel_name", "")}
 
 
-async def disconnect(session: AsyncSession, clerk_user_id: str) -> None:
-    connection = await connection_service.get_connection(session, clerk_user_id, PROVIDER)
+async def disconnect(
+    session: AsyncSession, clerk_user_id: str, connection_id: uuid.UUID | None = None
+) -> None:
+    connection = await connection_service.get_connection(
+        session, clerk_user_id, PROVIDER, connection_id
+    )
     try:
         token = decrypt_token(connection.access_token_enc, connection.key_version)
         await asyncio.to_thread(slack.revoke, token)  # best effort
     except Exception:
         logger.warning("slack_revoke_failed", exc_info=True)
-    await session.delete(connection)
-    await session.commit()
+    # Deletes the row and hands the default to the next workspace if this was the default.
+    await connection_service.disconnect(session, clerk_user_id, PROVIDER, connection.id)
 
 
 async def send_draft(
@@ -156,6 +177,7 @@ async def send_draft(
     step_id: str,
     channel_id: str,
     text: str,
+    connection_id: uuid.UUID | None = None,
 ) -> dict[str, Any]:
     """Posts the user's final (possibly edited) message and marks the draft sent."""
     await chat_service.get_owned_conversation(session, clerk_user_id, conversation_id)
@@ -168,7 +190,7 @@ async def send_draft(
         raise SlackDraftAlreadySent("This message was already posted.")
 
     channel_id, text = slack.validated_message(channel_id, text)
-    connection, token = await _connection_and_token(session, clerk_user_id)
+    connection, token = await _connection_and_token(session, clerk_user_id, connection_id)
     cfg = connection.config or {}
     if cfg.get("channel_id") == channel_id:
         channel_name = cfg.get("channel_name", "")
@@ -192,6 +214,7 @@ async def send_draft(
             "text": text,
             "status": "sent",
             "sent_at": sent_at,
+            "workspace": connection.external_account_email,
         },
     )
     await session.commit()

@@ -177,6 +177,8 @@ class PostSlackRequest(BaseModel):
     step_id: str = Field(min_length=1, max_length=200)  # the draft_slack_message call's id
     channel_id: str = Field(pattern=r"^[CG][A-Z0-9]{2,40}$")
     text: str = Field(min_length=1, max_length=10000)
+    # Which connected Slack workspace to post to; None = the user's default workspace.
+    connection_id: uuid.UUID | None = None
 
 
 class PostSlackResponse(BaseModel):
@@ -194,7 +196,13 @@ async def post_slack(
     """Posts a Slack draft the user approved on the draft card — the only way anything
     is posted to Slack."""
     posted = await slack_service.send_draft(
-        db, principal.user_id, body.conversation_id, body.step_id, body.channel_id, body.text
+        db,
+        principal.user_id,
+        body.conversation_id,
+        body.step_id,
+        body.channel_id,
+        body.text,
+        body.connection_id,
     )
     return PostSlackResponse(**posted)
 

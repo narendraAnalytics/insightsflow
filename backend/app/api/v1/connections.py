@@ -209,12 +209,13 @@ async def list_connections(
 ) -> list[ConnectionResponse]:
     connections = await connection_service.list_connections(db, principal.user_id)
     out: list[ConnectionResponse] = []
-    # The default Gmail account: the flagged one, else the oldest.
-    gmail_default = next((c.id for c in connections if c.provider == "gmail"), None)
-    for c in connections:
-        if c.provider == "gmail" and connection_service.is_default(c):
-            gmail_default = c.id
-            break
+    # Per provider that allows several accounts, the default: the flagged one, else the oldest.
+    defaults: dict[str, uuid.UUID] = {}
+    for provider in connection_service.MULTI_ACCOUNT_PROVIDERS:
+        rows = [c for c in connections if c.provider == provider]
+        flagged = next((c for c in rows if connection_service.is_default(c)), None)
+        if flagged or rows:
+            defaults[provider] = (flagged or rows[0]).id
     for connection in connections:
         # Only Sheets connections own data sources; other providers (Gmail) have none.
         sources: list[DataSource] = []
@@ -222,7 +223,9 @@ async def list_connections(
             sources = await data_source_service.refresh_stale_sources(db, principal.user_id)
         out.append(
             ConnectionResponse.from_model(
-                connection, sources, is_default=connection.id == gmail_default
+                connection,
+                sources,
+                is_default=defaults.get(connection.provider) == connection.id,
             )
         )
     return out
@@ -236,14 +239,17 @@ async def google_disconnect(
     await connection_service.disconnect(db, principal.user_id)
 
 
-async def _require_credits_for_new_gmail(db: AsyncSession, clerk_user_id: str) -> None:
-    """Another Gmail account costs credits and is capped; checked before OAuth starts."""
+async def _require_credits_for_new_account(
+    db: AsyncSession, clerk_user_id: str, provider: str, noun: str
+) -> None:
+    """Another account (Gmail) or workspace (Slack) costs credits and is capped; checked
+    before OAuth starts."""
     user = await connection_service.get_or_create_user(db, clerk_user_id)
-    accounts = await connection_service.provider_connections(db, user.id, "gmail")
+    accounts = await connection_service.provider_connections(db, user.id, provider)
     if len(accounts) >= connection_service.MAX_ACCOUNTS_PER_PROVIDER:
         raise connection_service.TooManyAccounts(
-            f"You can connect up to {connection_service.MAX_ACCOUNTS_PER_PROVIDER} Gmail "
-            "accounts. Disconnect one first."
+            f"You can connect up to {connection_service.MAX_ACCOUNTS_PER_PROVIDER} {noun}. "
+            "Disconnect one first."
         )
     await credit_service.require_credits(db, clerk_user_id, credit_service.CONNECT_COST)
 
@@ -266,7 +272,7 @@ async def gmail_connect_url(
     db: AsyncSession = Depends(get_db),
 ) -> ConnectUrlResponse:
     if not reconnect:
-        await _require_credits_for_new_gmail(db, principal.user_id)
+        await _require_credits_for_new_account(db, principal.user_id, "gmail", "Gmail accounts")
     url = await connection_service.start_google_connect(principal.user_id, "gmail")
     return ConnectUrlResponse(url=url)
 
@@ -329,10 +335,13 @@ class SlackChannelChoice(BaseModel):
 
 @router.get("/slack/connect-url", response_model=ConnectUrlResponse)
 async def slack_connect_url(
+    # reconnect=true refreshes a workspace that's already connected, for free.
+    reconnect: bool = Query(default=False),
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> ConnectUrlResponse:
-    await _require_credits_if_new(db, principal.user_id, "slack")
+    if not reconnect:
+        await _require_credits_for_new_account(db, principal.user_id, "slack", "Slack workspaces")
     return ConnectUrlResponse(url=slack_service.start_connect(principal.user_id))
 
 
@@ -352,34 +361,48 @@ async def slack_callback(
         await slack_service.complete_connect(db, clerk_user_id, code)
     except credit_service.InsufficientCredits:
         return RedirectResponse(url=f"{base}?billing=insufficient")
+    except connection_service.TooManyAccounts:
+        return RedirectResponse(url=f"{base}?slack_error=limit")
     return RedirectResponse(url=f"{base}?connected=slack")
 
 
-@router.get("/slack/channels", response_model=list[SlackChannelOut])
+@router.get("/slack/{connection_id}/channels", response_model=list[SlackChannelOut])
 async def slack_channels(
+    connection_id: uuid.UUID,
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> list[SlackChannelOut]:
-    channels = await slack_service.list_channels(db, principal.user_id)
+    channels = await slack_service.list_channels(db, principal.user_id, connection_id)
     return [SlackChannelOut(id=c.id, name=c.name) for c in channels]
 
 
-@router.put("/slack/channel", response_model=SlackChannelChoice)
+@router.put("/slack/{connection_id}/channel", response_model=SlackChannelChoice)
 async def slack_set_channel(
+    connection_id: uuid.UUID,
     body: SetSlackChannelRequest,
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> SlackChannelChoice:
-    config = await slack_service.set_channel(db, principal.user_id, body.channel_id)
+    config = await slack_service.set_channel(db, principal.user_id, body.channel_id, connection_id)
     return SlackChannelChoice(channel_id=config["channel_id"], channel_name=config["channel_name"])
 
 
-@router.delete("/slack", status_code=204)
+@router.delete("/slack/{connection_id}", status_code=204)
 async def slack_disconnect(
+    connection_id: uuid.UUID,
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    await slack_service.disconnect(db, principal.user_id)
+    await slack_service.disconnect(db, principal.user_id, connection_id)
+
+
+@router.post("/slack/{connection_id}/default", status_code=204)
+async def slack_make_default(
+    connection_id: uuid.UUID,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await connection_service.set_default(db, principal.user_id, connection_id, "slack")
 
 
 class NotionPageOut(BaseModel):

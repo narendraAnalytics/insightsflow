@@ -201,7 +201,7 @@ function AssistantMessage({
             <SlackDraftCard
               key={s.id}
               draft={s.draft}
-              onPost={(channelId, text) => draftActions.postSlack(s.id, channelId, text)}
+              onPost={(channelId, text, target) => draftActions.postSlack(s.id, channelId, text, target)}
             />
           ) : s.draft ? (
             <EmailDraftCard

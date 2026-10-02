@@ -50,7 +50,12 @@ export type SlackDraft = {
   text: string;
   status: "draft" | "sent";
   sent_at?: string;
+  /** The Slack workspace it was posted to (set once sent). */
+  workspace?: string | null;
 };
+
+/** Which connected Slack workspace a message is posted to; omitted = the default one. */
+export type SlackTarget = { id: string; workspace: string };
 
 /** A Notion page the AI drafted. Nothing is saved until the user clicks Save on the card. */
 export type NotionDraft = {
@@ -75,7 +80,7 @@ export type DraftActions = {
   /** Saves the (possibly edited) page under the draft's parent page. */
   saveNotion: (stepId: string, title: string, body: string) => Promise<void>;
   /** Posts the (possibly edited) message to `channelId`. */
-  postSlack: (stepId: string, channelId: string, text: string) => Promise<void>;
+  postSlack: (stepId: string, channelId: string, text: string, target?: SlackTarget) => Promise<void>;
   send: (stepId: string, fields: DraftFields, sender?: Sender) => Promise<void>;
   schedule: (stepId: string, fields: DraftFields, sendAtIso: string, sender?: Sender) => Promise<void>;
   cancel: (stepId: string, scheduledId: string) => Promise<void>;
@@ -394,14 +399,23 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[], gmailRe
         );
       },
       /** Posts a Slack draft now. */
-      postSlack: async (stepId, channelId, text) => {
+      postSlack: async (stepId, channelId, text, target) => {
         const conversation = conversationIdRef.current;
         if (!conversation) throw new Error("Open the chat again to post this message.");
         const token = await getToken();
         const res = await apiFetch<{ status: string; sent_at: string; channel_name: string }>(
           "/api/v1/insights/slack/send",
           token,
-          { method: "POST", body: { conversation_id: conversation, step_id: stepId, channel_id: channelId, text } }
+          {
+            method: "POST",
+            body: {
+              conversation_id: conversation,
+              step_id: stepId,
+              channel_id: channelId,
+              text,
+              connection_id: target?.id,
+            },
+          }
         );
         setStepDraft(stepId, {
           kind: "slack",
@@ -410,6 +424,7 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[], gmailRe
           text,
           status: "sent",
           sent_at: res.sent_at,
+          workspace: target?.workspace,
         });
       },
       /** Sends now. */

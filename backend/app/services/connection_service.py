@@ -27,6 +27,10 @@ class ConnectionExpired(AppError):
     code = "connection_expired"
 
 
+# Providers that may have several accounts per user (Gmail first, then Slack).
+MULTI_ACCOUNT_PROVIDERS = ("gmail", "slack")
+
+
 class TooManyAccounts(AppError):
     status_code = 409
     code = "too_many_accounts"
@@ -221,12 +225,18 @@ async def disconnect(
     await session.commit()
 
 
-async def set_default(session: AsyncSession, clerk_user_id: str, connection_id: uuid.UUID) -> None:
-    """Makes one Gmail account the default (the one drafts are sent from unless chosen)."""
+async def set_default(
+    session: AsyncSession,
+    clerk_user_id: str,
+    connection_id: uuid.UUID,
+    provider: str = "gmail",
+) -> None:
+    """Makes one account the default for its provider (Gmail, Slack): the one drafts use
+    unless the draft card picks another."""
     user = await get_or_create_user(session, clerk_user_id)
-    rows = await provider_connections(session, user.id, "gmail")
+    rows = await provider_connections(session, user.id, provider)
     if not any(c.id == connection_id for c in rows):
-        raise NotFoundError("Gmail account not found")
+        raise NotFoundError(f"{provider.title()} account not found")
     for c in rows:
         c.config = {**(c.config or {}), "default": c.id == connection_id}
     await session.commit()

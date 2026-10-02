@@ -3,7 +3,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowCounterClockwise, CheckCircle, Hash, PaperPlaneTilt, WarningCircle } from "@phosphor-icons/react";
-import type { SlackDraft } from "@/hooks/use-insights-chat";
+import type { SlackDraft, SlackTarget } from "@/hooks/use-insights-chat";
+import { useSlackConnection } from "@/hooks/use-slack-connection";
 
 const zeyada = "font-(family-name:--font-zeyada) font-normal";
 const cardShadow = "0 24px 36px -22px color-mix(in oklab, var(--flow-magenta) 50%, transparent)";
@@ -25,10 +26,21 @@ export function SlackDraftCard({
   onPost,
 }: {
   draft: SlackDraft;
-  onPost: (channelId: string, text: string) => Promise<void>;
+  onPost: (channelId: string, text: string, target?: SlackTarget) => Promise<void>;
 }) {
   const reduce = useReducedMotion();
   const uid = useId();
+  // With several workspaces the user picks where it goes; each posts to its own default channel.
+  const { accounts } = useSlackConnection();
+  const targets = accounts.filter((a) => a.status === "connected" && a.slack_channel_id);
+  const [targetId, setTargetId] = useState<string | null>(null);
+  const chosen =
+    targets.find((a) => a.id === targetId) ??
+    targets.find((a) => a.slack_channel_id === draft.channel_id) ??
+    targets.find((a) => a.is_default) ??
+    targets[0];
+  const multi = targets.length > 1 && chosen !== undefined;
+  const destination = multi ? `#${chosen.slack_channel_name}` : `#${draft.channel_name}`;
   const [text, setText] = useState(draft.text);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +62,14 @@ export function SlackDraftCard({
     setError(null);
     setBusy(true);
     try {
-      await onPost(draft.channel_id, text.trim());
+      if (multi && chosen.slack_channel_id) {
+        await onPost(chosen.slack_channel_id, text.trim(), {
+          id: chosen.id,
+          workspace: chosen.external_account_email ?? "",
+        });
+      } else {
+        await onPost(draft.channel_id, text.trim());
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't post to Slack. Try again.");
       setBusy(false);
@@ -94,6 +113,7 @@ export function SlackDraftCard({
               <p className={`truncate ${zeyada} text-[26px] leading-none text-(--flow-ink)`}>
                 Posted to #{draft.channel_name}
               </p>
+              {draft.workspace && <p className="truncate text-[12.5px] text-(--flow-ink)/65">in {draft.workspace}</p>}
               <p className="mt-1.5 rounded-xl bg-(--flow-peach)/40 px-3 py-2.5 text-[13.5px] leading-relaxed whitespace-pre-wrap text-(--flow-ink)/85">
                 {draft.text}
               </p>
@@ -141,9 +161,30 @@ export function SlackDraftCard({
             </div>
 
             <div className="px-4 pt-1 pb-4">
-              <p className={`pt-1 ${zeyada} text-[22px] leading-none text-(--flow-magenta)`}>
-                To <span className="text-(--flow-ink)">#{draft.channel_name}</span>
-              </p>
+              {multi ? (
+                <div className="flex items-center gap-2 pt-1">
+                  <label htmlFor={`${uid}-to`} className={`${zeyada} text-[22px] leading-none text-(--flow-magenta)`}>
+                    To
+                  </label>
+                  <select
+                    id={`${uid}-to`}
+                    value={chosen.id}
+                    onChange={(e) => setTargetId(e.target.value)}
+                    className="min-w-0 flex-1 cursor-pointer rounded-lg bg-transparent py-1 text-[14px] text-(--flow-ink) outline-none focus-visible:ring-2 focus-visible:ring-(--flow-magenta)/50"
+                  >
+                    {targets.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.external_account_email} · #{a.slack_channel_name}
+                        {a.is_default ? " (default)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <p className={`pt-1 ${zeyada} text-[22px] leading-none text-(--flow-magenta)`}>
+                  To <span className="text-(--flow-ink)">{destination}</span>
+                </p>
+              )}
               <label htmlFor={`${uid}-text`} className="sr-only">
                 Message
               </label>
