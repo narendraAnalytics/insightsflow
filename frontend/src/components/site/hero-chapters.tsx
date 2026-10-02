@@ -13,7 +13,7 @@ export const CHAPTERS: Chapter[] = [
   {
     name: "Overview",
     lines: [{ text: "Ask your sheets." }, { text: "Approve the answer." }, { text: "Alert the team.", sunrise: true }],
-    body: "InsightFlow reads your spreadsheets, computes every number with real code, drafts the report, and waits for your yes before anything reaches your team.",
+    body: "InsightFlow reads your sheets and documents, computes every number with real code, drafts the report, and waits for your yes before anything reaches your team.",
     glow: "var(--flow-magenta)",
   },
   {
@@ -33,8 +33,8 @@ export const CHAPTERS: Chapter[] = [
     body: "Turn an answer into an email, a Slack message or a Notion page. You edit the draft, and nothing is sent until you click.",
     chips: [
       { label: "Gmail", state: "live" },
-      { label: "Slack", state: "soon" },
-      { label: "Notion", state: "soon" },
+      { label: "Slack", state: "live" },
+      { label: "Notion", state: "live" },
     ],
     glow: "var(--flow-coral)",
   },

@@ -23,8 +23,8 @@ import { Magnetic, primaryButtonClass, secondaryButtonClass } from "@/components
 
 const worksWith = [
   { icon: GoogleSheetsGlyph, label: "Google Sheets", live: true },
-  { icon: NotionGlyph, label: "Notion", live: false },
-  { icon: SlackGlyph, label: "Slack", live: false },
+  { icon: NotionGlyph, label: "Notion", live: true },
+  { icon: SlackGlyph, label: "Slack", live: true },
 ];
 
 const LAST = CHAPTERS.length - 1;
@@ -123,7 +123,7 @@ function ChapterCopy({ chapter, index, displayName }: { chapter: Chapter; index:
           className="inline-flex items-center gap-2 rounded-full border border-(--border-subtle) bg-(--flow-shell)/70 py-1.5 pr-3.5 pl-1.5 text-[13px] font-semibold text-(--text-secondary) backdrop-blur-sm"
         >
           <span className="bg-sunrise rounded-full px-2 py-0.5 text-[11px] font-bold text-(--flow-shell)">New</span>
-          An AI analyst for your Google Sheets
+          An AI analyst for all your business data
         </motion.p>
       )}
 

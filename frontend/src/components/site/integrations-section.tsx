@@ -29,8 +29,8 @@ const outer: OrbitItem[] = [
 
 const legend: { icon: ComponentType<SVGProps<SVGSVGElement>>; name: string; role: string; live: boolean }[] = [
   { icon: GoogleSheetsGlyph, name: "Google Sheets", role: "Reads the spreadsheets and tabs you pick", live: true },
-  { icon: NotionGlyph, name: "Notion", role: "Keeps every approved report in one place", live: false },
-  { icon: SlackGlyph, name: "Slack", role: "Posts approved summaries to the right channel", live: false },
+  { icon: NotionGlyph, name: "Notion", role: "Keeps every approved report in one place", live: true },
+  { icon: SlackGlyph, name: "Slack", role: "Posts approved summaries to the right channel", live: true },
 ];
 
 const preserve: CSSProperties = { transformStyle: "preserve-3d" };

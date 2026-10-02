@@ -31,7 +31,7 @@ const steps = [
     accent: "var(--flow-coral)",
     title: "Get a draft report",
     body: "The findings are written up as a short report with the key numbers spelled out, ready for a person to read.",
-    live: false,
+    live: true,
   },
   {
     key: "approve",
@@ -39,7 +39,7 @@ const steps = [
     accent: "var(--flow-amber)",
     title: "Approve it",
     body: "Read the draft, then approve it or send it back. Until you approve, nothing is written or posted anywhere.",
-    live: false,
+    live: true,
   },
   {
     key: "deliver",
@@ -47,7 +47,7 @@ const steps = [
     accent: "var(--flow-pink)",
     title: "Deliver to your team",
     body: "The approved report is saved to Notion and a summary goes to the right Slack channel.",
-    live: false,
+    live: true,
   },
 ] as const;
 

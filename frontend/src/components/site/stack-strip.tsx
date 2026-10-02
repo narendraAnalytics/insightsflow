@@ -16,8 +16,8 @@ const stack: Item[] = [
   { icon: Database, label: "Neon Postgres", color: "var(--flow-mint)" },
   { icon: LockKey, label: "Clerk", color: "var(--flow-magenta)" },
   { icon: CreditCard, label: "Razorpay", color: "var(--flow-coral)" },
-  { brand: NotionGlyph, label: "Notion", note: "soon" },
-  { brand: SlackGlyph, label: "Slack", note: "soon" },
+  { brand: NotionGlyph, label: "Notion", note: "live" },
+  { brand: SlackGlyph, label: "Slack", note: "live" },
 ];
 
 export function StackStrip() {
