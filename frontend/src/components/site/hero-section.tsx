@@ -85,7 +85,7 @@ function HeroCtas({ displayName }: { displayName: string }) {
         <Magnetic>
           <SignUpButton mode="redirect" forceRedirectUrl="/">
             <button type="button" className={cn(primaryButtonClass, "px-7 py-3.5 text-[16px]")}>
-              Start free
+              Connect my business
               <ArrowRight weight="bold" className="size-4 transition-transform duration-200 group-hover:translate-x-1" />
             </button>
           </SignUpButton>
