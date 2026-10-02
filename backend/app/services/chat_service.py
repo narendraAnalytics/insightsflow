@@ -9,7 +9,13 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import NotFoundError
-from app.db.models.chat import ChatConversation, ChatConversationSource, ChatMessage
+from app.db.models.chat import (
+    ChatConversation,
+    ChatConversationDocument,
+    ChatConversationSource,
+    ChatMessage,
+)
+from app.db.models.document import Document
 from app.services.connection_service import get_or_create_user
 
 TITLE_MAX = 60
@@ -49,9 +55,22 @@ async def create_conversation(
     )
     session.add(conversation)
     await session.flush()
+    ids = list(dict.fromkeys(source_ids))
+    document_ids: set[uuid.UUID] = set()
+    if ids:
+        found = await session.execute(
+            select(Document.id).where(Document.id.in_(ids), Document.user_id == user.id)
+        )
+        document_ids = set(found.scalars())
     session.add_all(
         ChatConversationSource(conversation_id=conversation.id, data_source_id=sid)
-        for sid in dict.fromkeys(source_ids)
+        for sid in ids
+        if sid not in document_ids
+    )
+    session.add_all(
+        ChatConversationDocument(conversation_id=conversation.id, document_id=did)
+        for did in ids
+        if did in document_ids
     )
     await session.flush()
     return conversation
@@ -71,6 +90,14 @@ async def source_ids_for(
     grouped: dict[uuid.UUID, list[uuid.UUID]] = {cid: [] for cid in conversation_ids}
     for conversation_id, source_id in result.all():
         grouped[conversation_id].append(source_id)
+    # Uploaded documents share the same id list — the browser treats ids as opaque.
+    docs = await session.execute(
+        select(ChatConversationDocument.conversation_id, ChatConversationDocument.document_id)
+        .where(ChatConversationDocument.conversation_id.in_(conversation_ids))
+        .order_by(ChatConversationDocument.document_id)
+    )
+    for conversation_id, document_id in docs.all():
+        grouped[conversation_id].append(document_id)
     return grouped
 
 

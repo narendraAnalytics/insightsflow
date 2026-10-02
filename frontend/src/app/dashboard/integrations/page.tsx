@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { DocumentsCard } from "@/components/dashboard/integrations/documents-card";
 import { GmailCard } from "@/components/dashboard/integrations/gmail-card";
 import { GoogleSheetsCard } from "@/components/dashboard/integrations/google-sheets-card";
 import { NotionCard } from "@/components/dashboard/integrations/notion-card";
@@ -25,6 +26,9 @@ export default function IntegrationsPage() {
         <Suspense fallback={null}>
           <NotionCard />
         </Suspense>
+        <div id="documents" className="scroll-mt-6">
+          <DocumentsCard />
+        </div>
       </div>
     </div>
   );

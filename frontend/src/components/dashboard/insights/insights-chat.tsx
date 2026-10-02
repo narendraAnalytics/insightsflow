@@ -20,6 +20,7 @@ import {
 import NextLink from "next/link";
 import { GmailGlyph, NotionGlyph, SlackGlyph } from "@/components/site/brand-icons";
 import { useGmailConnection } from "@/hooks/use-gmail-connection";
+import { documentAsSource, useDocuments } from "@/hooks/use-documents";
 import { useNotionConnection } from "@/hooks/use-notion-connection";
 import { useSlackConnection } from "@/hooks/use-slack-connection";
 import { sourceLabel, useGoogleSheetsConnection, type DataSource } from "@/hooks/use-google-sheets-connection";
@@ -556,9 +557,18 @@ export function InsightsChat() {
   const { connection: notionConnection } = useNotionConnection();
   const { connection, loading } = useGoogleSheetsConnection();
   const { connection: gmailConnection, loading: gmailLoading } = useGmailConnection();
-  const sources = useMemo(() => connection?.sources ?? [], [connection]);
+  const { documents, loading: documentsLoading } = useDocuments();
+  // Ready documents are offered next to sheet tabs: same chips, same chat sources (the
+  // backend resolves each id to a sheet tab or a document).
+  const sources = useMemo(
+    () => [
+      ...(connection?.sources ?? []),
+      ...documents.filter((d) => d.status === "ready").map(documentAsSource),
+    ],
+    [connection, documents]
+  );
   const gmailReady = gmailConnection?.status === "connected" && gmailConnection.can_read_mail;
-  const ready = (connection?.status === "connected" && sources.length > 0) || gmailReady;
+  const ready = sources.length > 0 || gmailReady;
   const {
     messages,
     suggestions,
@@ -608,7 +618,7 @@ export function InsightsChat() {
     }
   };
 
-  if (loading || gmailLoading) {
+  if (loading || gmailLoading || documentsLoading) {
     return <p className="px-8 py-10 font-(family-name:--font-zeyada) text-[26px] leading-none text-(--flow-ink)/70">Loading…</p>;
   }
 
@@ -623,17 +633,18 @@ export function InsightsChat() {
         </span>
         <div>
           <p className="text-gradient-flow font-(family-name:--font-zeyada) text-[36px] leading-none font-normal">
-            Connect a sheet to start
+            Add something to ask about
           </p>
           <p className="mt-2 font-(family-name:--font-zeyada) text-[23px] leading-snug font-normal text-(--flow-ink)/80">
-            Pick a Google Sheet on the Integrations page, then ask questions about it here.
+            Connect a Google Sheet or Gmail, or upload an invoice or statement on the Integrations page, then ask
+            questions about it here.
           </p>
         </div>
         <a
           href="/dashboard/integrations"
           className="bg-gradient-flow rounded-full px-6 py-2 font-(family-name:--font-zeyada) text-[25px] leading-none font-normal text-(--flow-cream) shadow-[0_18px_30px_-14px_var(--flow-magenta)] transition-transform hover:scale-[1.04] active:scale-[0.97]"
         >
-          Go to Integrations
+          Add a data source
         </a>
       </CenterCard>
     );

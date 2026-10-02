@@ -24,7 +24,6 @@ from app.agent.graph import TableInfo, build_graph, build_system_prompt, shared_
 from app.agent.llm import build_llm
 from app.agent.tools import TableSet, build_frame, build_tools, describe_schema, tool_label
 from app.core.errors import AppError, NotFoundError
-from app.db.models.data_source import DataSource
 from app.db.session import get_sessionmaker
 from app.integrations.google import gmail as google_gmail
 from app.integrations.google import sheets as google_sheets
@@ -32,6 +31,7 @@ from app.services import (
     chat_service,
     connection_service,
     data_source_service,
+    document_service,
     notion_service,
     slack_service,
 )
@@ -74,7 +74,15 @@ class SheetContext:
         return " + ".join(names)
 
 
-def _table_names(sources: list[DataSource]) -> list[str]:
+@dataclass
+class _NamedTable:
+    """Stands in for a sheet tab when naming a table made from an uploaded document."""
+
+    name: str
+    tab_title: str = ""
+
+
+def _table_names(sources: list[Any]) -> list[str]:
     """Readable, unique table names: the tab title, or 'Book / Tab' when two
     tabs share a title."""
     names = [s.tab_title or s.name for s in sources]
@@ -120,8 +128,17 @@ async def load_sheet_context(
 
     tables: dict[str, pd.DataFrame] = {}
     truncated = False
-    if ids:
-        sources = [await data_source_service.get_source(session, clerk_user_id, i) for i in ids]
+    # An id may name an uploaded document instead of a sheet tab; both feed the same
+    # TableSet, so the agent's tools (and joins across them) don't care which is which.
+    documents = await document_service.get_ready_documents(session, clerk_user_id, ids)
+    document_ids = {d.id for d in documents}
+    sheet_ids = [i for i in ids if i not in document_ids]
+    named: list[Any] = []
+    frames: list[pd.DataFrame] = []
+    if sheet_ids:
+        sources = [
+            await data_source_service.get_source(session, clerk_user_id, i) for i in sheet_ids
+        ]
         connection = await connection_service.get_connection(session, clerk_user_id)
         access_token = await connection_service.get_valid_access_token(session, connection)
         previews = await asyncio.gather(
@@ -136,9 +153,14 @@ async def load_sheet_context(
                 for src in sources
             )
         )
-        frames = [build_frame(p.headers, p.rows) for p in previews]
-        tables = dict(zip(_table_names(sources), frames, strict=True))
+        named += sources
+        frames += [build_frame(p.headers, p.rows) for p in previews]
         truncated = any(len(f) >= MAX_SHEET_ROWS for f in frames)
+    for doc in documents:
+        named.append(_NamedTable(doc.filename.rsplit(".", 1)[0] or doc.filename))
+        frames.append(build_frame(list(doc.headers), [list(r) for r in doc.rows]))
+    if named:
+        tables = dict(zip(_table_names(named), frames, strict=True))
     return SheetContext(
         tables=tables,
         truncated=truncated,

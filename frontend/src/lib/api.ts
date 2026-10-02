@@ -19,13 +19,15 @@ export async function apiFetch<T>(
   token: string | null,
   init?: { method?: string; body?: unknown }
 ): Promise<T> {
+  // A FormData body (file upload) goes as multipart — the browser sets the boundary header itself.
+  const isForm = typeof FormData !== "undefined" && init?.body instanceof FormData;
   const res = await fetch(`${API_URL}${path}`, {
     method: init?.method ?? "GET",
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init?.body !== undefined ? { "Content-Type": "application/json" } : {}),
+      ...(init?.body !== undefined && !isForm ? { "Content-Type": "application/json" } : {}),
     },
-    body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
+    body: init?.body === undefined ? undefined : isForm ? (init.body as FormData) : JSON.stringify(init.body),
   });
   if (!res.ok) {
     let message = `API ${path} failed: ${res.status}`;

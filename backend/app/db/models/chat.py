@@ -48,6 +48,25 @@ class ChatConversationSource(Base):
     )
 
 
+class ChatConversationDocument(Base):
+    """An uploaded document a chat asks about. A separate table from the sheet link
+    above so neither table needs a nullable half; rows disappear with the document."""
+
+    __tablename__ = "chat_conversation_documents"
+
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("chat_conversations.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+
+
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
 
