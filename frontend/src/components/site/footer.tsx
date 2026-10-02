@@ -146,7 +146,7 @@ export function Footer() {
                 <span className="font-display text-[26px] leading-none text-(--flow-ink)">InsightFlow</span>
               </a>
               <p className="mt-4 max-w-[34ch] text-[16px] leading-relaxed text-(--text-secondary)">
-                An AI analyst for your Google Sheets, with a{" "}
+                An AI analyst for all your business data, with a{" "}
                 <span className="font-editorial text-sunrise pr-[0.05em] text-[1.1em]">person in charge</span> of what gets sent.
               </p>
               <div className="mt-5">
