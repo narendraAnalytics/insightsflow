@@ -347,6 +347,19 @@ html:has(.landing) {
   scroll-padding-top: 6rem;
 }
 
+/* Integrations graphic: dashed orbit rings that appear to turn. */
+@keyframes dash-march {
+  to {
+    stroke-dashoffset: -260;
+  }
+}
+.animate-dash-march {
+  animation: dash-march 36s linear infinite;
+}
+.animate-dash-march-rev {
+  animation: dash-march 28s linear infinite reverse;
+}
+
 /* Lenis (hero scroll stage) does its own smoothing; native smooth fights it. */
 html.lenis:has(.landing) {
   scroll-behavior: auto;
