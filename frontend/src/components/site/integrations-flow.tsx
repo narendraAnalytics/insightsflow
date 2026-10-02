@@ -11,7 +11,7 @@ import {
   useTransform,
   type MotionValue,
 } from "framer-motion";
-import { ArrowCounterClockwise, Check, CreditCard, Database, FilePdf, LockKey } from "@phosphor-icons/react";
+import { Check, CreditCard, Database, FilePdf, LockKey } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { GmailGlyph, GoogleSheetsGlyph, NotionGlyph, SlackGlyph } from "@/components/site/brand-icons";
 import { LogoVideo } from "@/components/site/logo-video";
@@ -26,6 +26,8 @@ import { LogoVideo } from "@/components/site/logo-video";
    --------------------------------------------------------------------------- */
 
 const END = 16;
+const HOLD = 3.5; // seconds the finished picture stays before it restarts by itself
+const TOTAL = END + HOLD;
 const IDLE_LOOP = 15; // drift (7.5 s) and breathing (5 s) both divide this
 const STAY = 99; // "never fades out" end of a window
 const W = 640;
@@ -79,7 +81,7 @@ const CAPTIONS: { text: string; win: [number, number] }[] = [
   { text: "It drafts the report for you.", win: [7.2, 9.2] },
   { text: "Nothing goes out until you say yes.", win: [9.2, 11.4] },
   { text: "Then it reaches your team.", win: [11.4, 14.4] },
-  { text: "Sign-in by Clerk. Secure payments by Razorpay.", win: [14.4, STAY] },
+  { text: "Sign-in by Clerk. Secure payments by Razorpay.", win: [14.4, TOTAL] },
 ];
 
 /* ---- timeline constants -------------------------------------------------- */
@@ -422,30 +424,97 @@ function Caption({ t, text, win }: { t: MotionValue<number>; text: string; win: 
   );
 }
 
-function StepDot({ t, index, active, onSelect }: { t: MotionValue<number>; index: number; active: boolean; onSelect: () => void }) {
+/** One segment of the progress strip: shows where the story is, nothing to click. */
+function StepDot({ t, index, active }: { t: MotionValue<number>; index: number; active: boolean }) {
   const end = index < STEPS.length - 1 ? STEPS[index + 1].at : END;
   const fill = useT(t, (time) => ramp(time, STEPS[index].at, end));
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-label={`Step ${index + 1}: ${STEPS[index].name}`}
-      aria-current={active ? "step" : undefined}
-      className="group flex min-w-0 flex-1 flex-col gap-2 text-left"
-    >
-      <span className="relative block h-1.5 overflow-hidden rounded-full bg-(--flow-ink)/10 transition-[height] group-hover:h-2">
+    <div className="flex min-w-0 flex-1 flex-col gap-2">
+      <span className="relative block h-1.5 overflow-hidden rounded-full bg-(--flow-ink)/10">
         <motion.span style={{ scaleX: fill }} className="bg-sunrise absolute inset-0 origin-left" />
       </span>
-      <span
-        className={cn(
-          "truncate text-[12.5px] font-semibold transition-colors sm:text-[13.5px]",
-          active ? "text-(--flow-ink)" : "text-(--text-muted) group-hover:text-(--flow-ink)"
-        )}
-      >
+      <span className={cn("truncate text-[12.5px] font-semibold transition-colors sm:text-[13.5px]", active ? "text-(--flow-ink)" : "text-(--text-muted)")}>
         {index + 1}
         <span className="hidden sm:inline"> {STEPS[index].name}</span>
       </span>
-    </button>
+    </div>
+  );
+}
+
+/* ---- animated business backdrop ------------------------------------------ */
+const STEP_WASH = ["var(--flow-mint)", "var(--flow-magenta)", "var(--flow-coral)", "var(--flow-amber)", "var(--flow-pink)"];
+const BAR_HEIGHTS = [34, 52, 41, 66, 48, 78, 58, 88, 64, 96, 72, 84, 60, 74];
+// a rising trend line, in backdrop units (1000 x 600)
+const TREND: Pt[] = [
+  [0, 470], [110, 440], [210, 455], [320, 390], [430, 410], [540, 330], [650, 350], [760, 270], [880, 210], [1000, 150],
+];
+const TREND_LEN = TREND.reduce((sum, p, i) => (i === 0 ? 0 : sum + Math.hypot(p[0] - TREND[i - 1][0], p[1] - TREND[i - 1][1])), 0);
+const TREND_D = TREND.map((p, i) => `${i === 0 ? "M" : "L"}${p[0]} ${p[1]}`).join(" ");
+
+function WashLayer({ t, index }: { t: MotionValue<number>; index: number }) {
+  const a = STEPS[index].at;
+  const b = index < STEPS.length - 1 ? STEPS[index + 1].at : STAY;
+  const opacity = useT(t, (time) => (index === 0 ? 1 : ramp(time, a - 0.6, a + 0.6)) - (index === STEPS.length - 1 ? 0 : ramp(time, b - 0.6, b + 0.6)));
+  return (
+    <motion.div
+      aria-hidden="true"
+      style={{
+        opacity,
+        background: `radial-gradient(52% 48% at 50% 52%, color-mix(in oklab, ${STEP_WASH[index]} 34%, transparent), transparent 100%)`,
+      }}
+      className="absolute inset-0"
+    />
+  );
+}
+
+function Bar({ u, height, phase, index }: { u: MotionValue<number>; height: number; phase: number; index: number }) {
+  const scaleY = useT(u, (idle) => 0.8 + 0.2 * Math.sin((idle / 7.5) * TAU + phase));
+  return (
+    <motion.div
+      style={{ height: `${height}%`, scaleY }}
+      className={cn(
+        "w-full origin-bottom rounded-t-xl bg-linear-to-t",
+        index % 3 === 0 ? "from-(--flow-pink)/35 to-(--flow-amber)/10" : index % 3 === 1 ? "from-(--flow-mint)/35 to-(--flow-pink)/10" : "from-(--flow-coral)/30 to-(--flow-amber)/10"
+      )}
+    />
+  );
+}
+
+function TrendLine({ u, shift, color }: { u: MotionValue<number>; shift: number; color: string }) {
+  const progress = useT(u, (idle) => easeOut(ramp((idle + shift) % IDLE_LOOP, 0.5, 9)));
+  const opacity = useT(u, (idle) => trap((idle + shift) % IDLE_LOOP, 0.5, 2, 10, 13.5));
+  const offset = useTransform(progress, (p) => round(TREND_LEN * (1 - p)));
+  return (
+    <motion.path
+      d={TREND_D}
+      fill="none"
+      strokeWidth={3}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeDasharray={TREND_LEN}
+      style={{ stroke: color, strokeDashoffset: offset, opacity }}
+    />
+  );
+}
+
+function Backdrop({ t, u }: { t: MotionValue<number>; u: MotionValue<number> }) {
+  const grid = useT(u, (idle) => Math.sin((idle / 7.5) * TAU) * 6);
+  return (
+    <div aria-hidden="true" className="pointer-events-none absolute -inset-x-[16%] -inset-y-[12%] -z-10 [mask-image:radial-gradient(ellipse_at_center,black_52%,transparent_78%)]">
+      {STEP_WASH.map((_, i) => (
+        <WashLayer key={i} t={t} index={i} />
+      ))}
+      <motion.div style={{ y: grid }} className="lux-dots absolute inset-0 opacity-60" />
+      <div className="absolute inset-x-[4%] bottom-0 flex h-[46%] items-end gap-[2.2%]">
+        {BAR_HEIGHTS.map((h, i) => (
+          <Bar key={i} u={u} height={h} phase={i * 0.9} index={i} />
+        ))}
+      </div>
+      <svg viewBox="0 0 1000 760" className="absolute inset-0 size-full">
+        <TrendLine u={u} shift={0} color="color-mix(in oklab, var(--flow-magenta) 55%, transparent)" />
+        <TrendLine u={u} shift={5} color="color-mix(in oklab, var(--flow-mint) 70%, transparent)" />
+      </svg>
+    </div>
   );
 }
 
@@ -454,27 +523,31 @@ export function IntegrationsFlow() {
   const reduced = useReducedMotion() ?? false;
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { amount: 0.4 });
-  const t = useMotionValue(0); // scene time, 0..END, plays once
+  const t = useMotionValue(0); // scene time: plays 0..END, holds the finished picture, then wraps to 0
   const u = useMotionValue(0); // free-running idle clock
-  const clock = useRef({ time: 0, idle: 0, playing: false });
+  const clock = useRef({ time: 0, idle: 0 });
   const [step, setStep] = useState(0);
-  const [done, setDone] = useState(false);
 
   // reduced motion: show the finished picture, no playback
   useEffect(() => {
     if (!reduced) return;
     t.set(END);
     setStep(STEPS.length - 1);
-    setDone(true);
   }, [reduced, t]);
 
-  // autoplay once, the first time it is mostly on screen
-  const started = useRef(false);
+  // runs by itself while on screen; when it scrolls back into view it starts from the top
+  const left = useRef(true);
   useEffect(() => {
-    if (reduced || !inView || started.current) return;
-    started.current = true;
-    clock.current.playing = true;
-  }, [inView, reduced]);
+    if (!inView) {
+      left.current = true;
+      return;
+    }
+    if (left.current) {
+      left.current = false;
+      clock.current.time = 0;
+      t.set(0);
+    }
+  }, [inView, t]);
 
   useAnimationFrame((_, delta) => {
     if (reduced || !inView) return;
@@ -482,26 +555,16 @@ export function IntegrationsFlow() {
     const dt = Math.min(delta, 100) / 1000;
     c.idle = (c.idle + dt) % IDLE_LOOP;
     u.set(c.idle);
-    if (!c.playing) return;
-    c.time = Math.min(END, c.time + dt);
+    c.time += dt;
+    if (c.time >= TOTAL) c.time -= TOTAL; // finished and held: start over automatically
     t.set(c.time);
-    if (c.time >= END) {
-      c.playing = false;
-      setDone(true);
-    }
   });
 
   useMotionValueEvent(t, "change", (v) => setStep((s) => (stepOf(v) === s ? s : stepOf(v))));
 
-  const seek = (i: number) => {
-    started.current = true;
-    clock.current.time = STEPS[i].at;
-    clock.current.playing = true;
-    t.set(STEPS[i].at);
-    setDone(false);
-  };
-
   const cameraTransform = useTransform(t, camera);
+  // soft fade in at the start and out at the end so the restart is not a hard cut
+  const sceneOpacity = useT(t, (time) => ramp(time, 0, 0.5) * (1 - ramp(time, TOTAL - 0.6, TOTAL)));
 
   const dest = (i: number): Win => [DELIVER_START[i] + DELIVER_DUR, DELIVER_START[i] + DELIVER_DUR + 0.35, STAY, STAY + 1];
   const clerkWin: Win = [14.4, 14.8, STAY, STAY + 1];
@@ -516,14 +579,15 @@ export function IntegrationsFlow() {
   ];
 
   return (
-    <div ref={ref}>
+    <div ref={ref} className="relative">
+      <Backdrop t={t} u={u} />
       <div
         role="img"
         aria-label="Animated walkthrough: data from Google Sheets, Gmail, documents and your database flows into InsightFlow, which computes the answers with code, drafts a report, waits for your approval, then delivers it to Slack, Notion and Gmail."
         className="relative mx-auto w-full max-w-[640px] overflow-hidden rounded-[28px] border border-(--border-subtle) bg-(--flow-shell)/45 shadow-(--shadow-md)"
         style={{ aspectRatio: `${W} / ${H}` }}
       >
-        <motion.div className="absolute inset-0" style={{ transform: cameraTransform, transformOrigin: "0 0" }}>
+        <motion.div className="absolute inset-0" style={{ transform: cameraTransform, transformOrigin: "0 0", opacity: sceneOpacity }}>
           <div aria-hidden="true" className="absolute inset-[4%] rounded-full bg-[radial-gradient(circle,color-mix(in_oklab,var(--flow-peach)_75%,transparent)_0%,color-mix(in_oklab,var(--flow-mint)_30%,transparent)_60%,transparent_74%)] blur-xl" />
 
           <svg viewBox={`0 0 ${W} ${H}`} className="absolute inset-0 size-full" aria-hidden="true">
@@ -605,22 +669,10 @@ export function IntegrationsFlow() {
               <Caption key={c.text} t={t} text={c.text} win={c.win} />
             ))}
           </div>
-          <div className="mx-auto mt-4 flex max-w-[640px] items-start gap-2 sm:gap-3">
+          <div aria-hidden="true" className="mx-auto mt-4 flex max-w-[640px] items-start gap-2 sm:gap-3">
             {STEPS.map((_, i) => (
-              <StepDot key={i} t={t} index={i} active={i === step} onSelect={() => seek(i)} />
+              <StepDot key={i} t={t} index={i} active={i === step} />
             ))}
-            <button
-              type="button"
-              onClick={() => seek(0)}
-              aria-label="Replay"
-              tabIndex={done ? 0 : -1}
-              className={cn(
-                "-mt-2 flex size-9 shrink-0 items-center justify-center rounded-full border border-(--border-strong) bg-(--flow-shell)/80 text-(--flow-ink) transition-[opacity,transform,background-color] duration-300 hover:bg-(--flow-shell) active:scale-95",
-                done ? "opacity-100" : "pointer-events-none scale-90 opacity-0"
-              )}
-            >
-              <ArrowCounterClockwise weight="bold" className="size-4" />
-            </button>
           </div>
         </>
       )}
