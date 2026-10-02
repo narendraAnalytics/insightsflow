@@ -16,6 +16,7 @@ from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel
 
 from app.agent.numbers import number_to_words
+from app.agent.texts import TextError, TextSet
 from app.core.errors import AppError
 from app.integrations.google.gmail import MAX_BODY as EMAIL_MAX_BODY
 from app.integrations.google.gmail import clean_body, clean_subject, parse_recipient
@@ -319,6 +320,7 @@ def build_tools(
     can_draft_email: bool = False,
     slack_channel: dict[str, str] | None = None,
     notion_page: dict[str, str] | None = None,
+    texts: TextSet | None = None,
 ) -> list[BaseTool]:
     """Tools closed over one request's tables. A bare DataFrame is accepted for
     the single-sheet case and becomes a one-table set named 'sheet'.
@@ -329,9 +331,59 @@ def build_tools(
     `slack_channel` ({id, name}, the user's default channel) enables
     `draft_slack_message`, which likewise only drafts — the user's click posts it.
     `notion_page` ({id, title}, the chosen parent page) enables `draft_notion_page`,
-    which also only drafts — the user's click saves it to Notion."""
+    which also only drafts — the user's click saves it to Notion.
+    `texts` (digitised documents) enables `search_document` and `read_document`."""
     if isinstance(tables, pd.DataFrame):
         tables = TableSet({"sheet": tables})
+
+    def used_sources() -> list[str]:
+        return [*tables.sources(), *(texts.sources() if texts else [])]
+
+    def search_document(query: str, document: str | None = None) -> str:
+        assert texts is not None
+        try:
+            hits = texts.search(query, document)
+        except TextError as e:
+            return _err(str(e))
+        if not hits:
+            return _ok(
+                "No passage matched those keywords. Try other words or synonyms, or use "
+                "read_document to look through the document.",
+                matches=0,
+            )
+        return _ok(
+            f"{len(hits)} passage(s) found, best first. Quote from them and cite the page.",
+            table={
+                "columns": ["Document", "Page", "Section", "Passage"],
+                "rows": [[h["document"], h["page"], h["section"], h["text"]] for h in hits],
+            },
+            matches=len(hits),
+        )
+
+    def read_document(document: str | None = None, page: int | None = None) -> str:
+        assert texts is not None
+        try:
+            out = texts.read(document, page)
+        except TextError as e:
+            return _err(str(e))
+        if page is None:
+            return _ok(
+                f"'{out['document']}' has pages {out['pages'][0]}-{out['pages'][-1]}. "
+                "Section headings by page are listed; read a page to see its text.",
+                table={
+                    "columns": ["Page", "Section"],
+                    "rows": [[o["page"], o["section"]] for o in out["outline"]],
+                },
+            )
+        return _ok(
+            f"Text of page {out['page']} of '{out['document']}'. Quote from it and cite the page.",
+            table={
+                "columns": ["Document", "Page", "Section", "Passage"],
+                "rows": [
+                    [out["document"], out["page"], p["section"], p["text"]] for p in out["passages"]
+                ],
+            },
+        )
 
     def draft_notion_page(title: str, body: str) -> str:
         assert notion_page is not None
@@ -339,7 +391,7 @@ def build_tools(
         title, body = notion_clean_title(title), notion_clean_body(body)
         if not title or not body:
             return _err("A Notion page needs both a title and some content")
-        body = with_source(body, tables.sources(), NOTION_MAX_BODY)
+        body = with_source(body, used_sources(), NOTION_MAX_BODY)
         return _ok(
             "Notion page drafted and shown to the user to review. It has NOT been saved.",
             draft={
@@ -357,7 +409,7 @@ def build_tools(
         text = slack_clean_message(re.split(r"<[a-zA-Z/!]", text, maxsplit=1)[0])
         if not text:
             return _err("A Slack message can't be empty")
-        text = with_source(text, tables.sources(), SLACK_MAX_MESSAGE)
+        text = with_source(text, used_sources(), SLACK_MAX_MESSAGE)
         return _ok(
             "Slack message drafted and shown to the user to review. It has NOT been posted.",
             draft={
@@ -376,7 +428,7 @@ def build_tools(
         subject, body = clean_subject(subject), clean_body(body)
         if not subject or not body:
             return _err("A draft needs both a subject and a message body")
-        body = with_source(body, tables.sources(), EMAIL_MAX_BODY)
+        body = with_source(body, used_sources(), EMAIL_MAX_BODY)
         # An address that isn't one valid recipient is dropped: the user types it on the card.
         recipient = parse_recipient(to) if to else None
         return _ok(
@@ -601,11 +653,38 @@ def build_tools(
             )
         )
 
+    doc_tools: list[BaseTool] = (
+        [
+            StructuredTool.from_function(
+                search_document,
+                name="search_document",
+                description=(
+                    "Find the passages of an uploaded text document (contract, report) that "
+                    "match some keywords. Returns up to 5 passages with their page and section. "
+                    "Use short keyword queries (e.g. 'payment terms', 'termination notice'); "
+                    "omit `document` to search all documents."
+                ),
+            ),
+            StructuredTool.from_function(
+                read_document,
+                name="read_document",
+                description=(
+                    "Read an uploaded text document: without `page` it lists the section "
+                    "headings by page; with `page` it returns that page's text. Use it when "
+                    "search finds nothing or you need the surrounding text."
+                ),
+            ),
+        ]
+        if texts
+        else []
+    )
+
     if not tables.tables:  # a chat with no sheet has no analysis tools to offer
-        return mail_tools
+        return [*mail_tools, *doc_tools]
 
     return [
         *mail_tools,
+        *doc_tools,
         StructuredTool.from_function(
             describe_sheet,
             name="describe_sheet",
@@ -664,6 +743,11 @@ def tool_label(name: str, args: dict[str, Any]) -> str:
         return "Drafting your Slack message"
     if name == "draft_notion_page":
         return "Drafting your Notion page"
+    if name == "search_document":
+        return f"Searching the document for “{args.get('query', '')}”"
+    if name == "read_document":
+        page = args.get("page")
+        return f"Reading page {page} of the document" if page else "Reading the document outline"
     if name == "describe_sheet":
         return "Reading the sheet structure"
     if name == "join_tables":

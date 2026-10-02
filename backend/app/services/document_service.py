@@ -34,7 +34,9 @@ ALLOWED_TYPES = {
     "image/png": b"\x89PNG",
     "image/jpeg": b"\xff\xd8\xff",
 }
-TEMPLATES = {*sarvam_documents.TEMPLATES, "custom"}
+TEXT_TEMPLATE = "text"  # Digitise: contracts, reports — read as passages, not rows
+TEMPLATES = {*sarvam_documents.TEMPLATES, "custom", TEXT_TEMPLATE}
+TEXT_HEADERS = ["Page", "Section", "Passage"]
 
 _background: set[asyncio.Task] = set()  # strong refs so a running job isn't garbage collected
 
@@ -135,7 +137,9 @@ async def create_document(
     """Validates, records a `processing` row and starts the background job."""
     validate_upload(filename, content, mime)
     if template not in TEMPLATES:
-        raise InvalidDocument("Choose what to extract: invoice, bank statement, receipt or custom")
+        raise InvalidDocument(
+            "Choose the document type: invoice, bank statement, receipt, contract/report or custom"
+        )
     prompt = (prompt or "").strip() or None
     if template == "custom" and not prompt:
         raise InvalidDocument("Describe what to extract from this document")
@@ -164,6 +168,7 @@ async def create_document(
         user_id=user.id,
         filename=filename[:255] or "document",
         template=template,
+        kind="text" if template == TEXT_TEMPLATE else "table",
         prompt=prompt if template == "custom" else None,
         status="processing",
     )
@@ -207,18 +212,26 @@ async def _process(
     headers: list[str] = []
     rows: list[list] = []
     try:
-        schema = (
-            await draft_schema(prompt or "")
-            if template == "custom"
-            else sarvam_documents.TEMPLATES[template]
-        )
-        extraction = await asyncio.to_thread(
-            sarvam_documents.extract, filename, content, mime, schema
-        )
-        headers, rows = sarvam_documents.flatten_result(extraction.result)
-        pages = extraction.pages
-        if not rows or not any(any(c not in (None, "") for c in r) for r in rows):
-            status, error = "failed", "No data was found. Try a different document type."
+        if template == TEXT_TEMPLATE:
+            digitised = await asyncio.to_thread(sarvam_documents.digitise, filename, content, mime)
+            headers = TEXT_HEADERS
+            rows = [[p["page"], p["section"], p["text"]] for p in digitised.passages]
+            pages = digitised.pages
+            if not rows:
+                status, error = "failed", "No text was found in this document."
+        else:
+            schema = (
+                await draft_schema(prompt or "")
+                if template == "custom"
+                else sarvam_documents.TEMPLATES[template]
+            )
+            extraction = await asyncio.to_thread(
+                sarvam_documents.extract, filename, content, mime, schema
+            )
+            headers, rows = sarvam_documents.flatten_result(extraction.result)
+            pages = extraction.pages
+            if not rows or not any(any(c not in (None, "") for c in r) for r in rows):
+                status, error = "failed", "No data was found. Try a different document type."
     except AppError as exc:
         status, error = "failed", exc.message
     except Exception:

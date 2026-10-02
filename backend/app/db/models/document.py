@@ -25,7 +25,9 @@ class Document(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     filename: Mapped[str] = mapped_column(String(255))
-    template: Mapped[str] = mapped_column(String(32))  # invoice | bank_statement | receipt | custom
+    template: Mapped[str] = mapped_column(String(32))  # invoice|bank_statement|receipt|custom|text
+    # table = Extract (rows of fields); text = Digitise (rows are passages: page, section, text)
+    kind: Mapped[str] = mapped_column(String(8), default="table", server_default="table")
     prompt: Mapped[str | None] = mapped_column(Text)  # what to extract, for template=custom
     status: Mapped[str] = mapped_column(String(16), default="processing")
     error: Mapped[str | None] = mapped_column(Text)

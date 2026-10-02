@@ -13,6 +13,7 @@ Google clients. No FastAPI/DB imports here.
 import json
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -159,20 +160,15 @@ def _client() -> SarvamAI:
     return SarvamAI(api_subscription_key=key)
 
 
-def extract(filename: str, content: bytes, mime: str, schema: dict[str, Any]) -> Extraction:
-    """Submit -> poll -> fetch. Blocking; the caller runs it in a thread."""
+def _run_job(start: Callable[[SarvamAI], Any]) -> Any:
+    """Submit -> poll -> fetch results. Blocking; the caller runs it in a thread. SDK errors
+    carry request headers, so they are caught and only Sarvam's own message is surfaced."""
     client = _client()
     try:
-        job = client.doc_ai.extract(
-            file=[(filename, content, mime)],
-            schema=json.dumps(validate_schema(schema)),
-            language="en-IN",
-            output_format="json",
-        )
+        job = start(client)
         deadline = time.monotonic() + JOB_TIMEOUT
         while True:
-            status = client.doc_ai.get_status(job_id=job.job_id)
-            state = status.status.lower()
+            state = client.doc_ai.get_status(job_id=job.job_id).status.lower()
             if state in _TERMINAL:
                 break
             if time.monotonic() > deadline:
@@ -180,17 +176,90 @@ def extract(filename: str, content: bytes, mime: str, schema: dict[str, Any]) ->
             time.sleep(POLL_SECONDS)
         if state in {"failed", "rejected"}:
             raise DocumentRejected("The document couldn't be read. Try a clearer scan or PDF.")
-        results = client.doc_ai.get_results(job_id=job.job_id)
+        return client.doc_ai.get_results(job_id=job.job_id)
     except AppError:
         raise
-    except Exception as exc:  # SDK errors carry request headers — never surface them raw
+    except Exception as exc:
         detail = getattr(exc, "body", None)
         message = detail.get("message") if isinstance(detail, dict) else None
         raise DocumentRejected(message or "Sarvam couldn't process this document") from exc
 
+
+def _pages_processed(results: Any) -> int:
     usage = getattr(results, "usage", None)
-    pages = int(getattr(usage, "pages_processed", 0) or 0)
-    return Extraction(result=dict(results.result or {}), pages=pages)
+    return int(getattr(usage, "pages_processed", 0) or 0)
+
+
+def extract(filename: str, content: bytes, mime: str, schema: dict[str, Any]) -> Extraction:
+    """Schema-based Extract: the fields you ask for, as JSON."""
+    results = _run_job(
+        lambda client: client.doc_ai.extract(
+            file=[(filename, content, mime)],
+            schema=json.dumps(validate_schema(schema)),
+            language="en-IN",
+            output_format="json",
+        )
+    )
+    return Extraction(result=dict(results.result or {}), pages=_pages_processed(results))
+
+
+@dataclass
+class Digitisation:
+    passages: list[dict[str, Any]]  # {"page": int, "section": str, "text": str}
+    pages: int
+
+
+def digitise(filename: str, content: bytes, mime: str) -> Digitisation:
+    """Whole-document Digitise: every page as typed blocks, regrouped into passages."""
+    results = _run_job(
+        lambda client: client.doc_ai.digitise(
+            file=[(filename, content, mime)], language="en-IN", output_format="json"
+        )
+    )
+    documents = results.model_dump().get("documents") or []
+    return Digitisation(passages=blocks_to_passages(documents), pages=_pages_processed(results))
+
+
+MAX_PASSAGE_CHARS = (
+    900  # about a paragraph or two: small enough to quote, big enough to mean something
+)
+MAX_PASSAGES = 400
+_SKIP_TAGS = ("page-number", "page_number", "footer", "header")
+
+
+def _flush(passages: list[dict[str, Any]], page: int, section: str, buffer: list[str]) -> None:
+    text = " ".join(buffer).strip()
+    if text:
+        passages.append({"page": page, "section": section, "text": text})
+    buffer.clear()
+
+
+def blocks_to_passages(documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Digitise JSON -> passages, in reading order. A section title starts a new section
+    (and is carried onto the passages under it, even across pages); a passage never spans
+    two pages, so its page number is always exact for citations."""
+    passages: list[dict[str, Any]] = []
+    section = ""
+    for doc in documents:
+        for page in doc.get("pages") or []:
+            number = int(page.get("page_num") or page.get("page_number") or 0)
+            buffer: list[str] = []
+            blocks = sorted(page.get("blocks") or [], key=lambda b: b.get("reading_order") or 0)
+            for block in blocks:
+                text = " ".join(str(block.get("text") or "").split())
+                tag = str(block.get("layout_tag") or "").lower()
+                if not text or any(t in tag for t in _SKIP_TAGS):
+                    continue
+                if "title" in tag or tag.startswith("heading"):
+                    _flush(passages, number, section, buffer)
+                    section = text[:120]
+                    buffer.append(text)  # the heading starts its passage
+                    continue
+                if buffer and sum(len(x) for x in buffer) + len(text) > MAX_PASSAGE_CHARS:
+                    _flush(passages, number, section, buffer)
+                buffer.append(text)
+            _flush(passages, number, section, buffer)
+    return passages[:MAX_PASSAGES]
 
 
 def _label(key: str) -> str:

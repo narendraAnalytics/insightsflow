@@ -18,6 +18,7 @@ const TEMPLATES: { id: DocumentTemplate; label: string; hint: string }[] = [
   { id: "invoice", label: "Invoice", hint: "Line items, vendor, dates" },
   { id: "bank_statement", label: "Bank statement", hint: "Every transaction row" },
   { id: "receipt", label: "Receipt", hint: "Merchant and items" },
+  { id: "text", label: "Contract / report", hint: "Searchable text, answers cite the page" },
   { id: "custom", label: "Custom", hint: "Describe what you need" },
 ];
 
@@ -64,7 +65,9 @@ function DocumentRow({
           {doc.status === "ready" && (
             <p className={`mt-1 flex items-center gap-1.5 ${zeyada} text-[20px] leading-none text-(--flow-ink)/75`}>
               <CheckCircle weight="fill" className="size-3.5 text-[oklch(0.68_0.15_160)]" />
-              Ready · {doc.row_count} row{doc.row_count === 1 ? "" : "s"}, {doc.headers.length} columns
+              {doc.kind === "text"
+                ? `Ready · ${doc.row_count} passage${doc.row_count === 1 ? "" : "s"} across ${doc.page_count} page${doc.page_count === 1 ? "" : "s"}`
+                : `Ready · ${doc.row_count} row${doc.row_count === 1 ? "" : "s"}, ${doc.headers.length} columns`}
             </p>
           )}
           {doc.status === "failed" && (
@@ -125,7 +128,7 @@ function DocumentRow({
                 {data.rows.slice(0, 8).map((r, i) => (
                   <tr key={i} className="border-t border-(--flow-ink)/10">
                     {r.map((c, j) => (
-                      <td key={j} className="whitespace-nowrap px-2 py-1">
+                      <td key={j} className={doc.kind === "text" ? "min-w-24 px-2 py-1 align-top" : "whitespace-nowrap px-2 py-1"}>
                         {c ?? "—"}
                       </td>
                     ))}
@@ -136,7 +139,7 @@ function DocumentRow({
           )}
           {data && data.row_count > 8 && (
             <p className={`mt-1 px-2 ${zeyada} text-[19px] text-(--flow-ink)/65`}>
-              Showing 8 of {data.row_count} rows
+              Showing 8 of {data.row_count} {doc.kind === "text" ? "passages" : "rows"}
             </p>
           )}
         </div>
@@ -201,8 +204,8 @@ export function DocumentsCard() {
 
       <div className="flex flex-col gap-3">
         <p className={`${zeyada} text-[21px] leading-snug text-(--flow-ink)/75`}>
-          Upload a PDF or image. Sarvam reads it into rows, and AI Insights can answer questions about it — even next to
-          your sheets.
+          Upload a PDF or image. Sarvam reads it — invoices into rows, contracts and reports into searchable text — and AI
+          Insights answers questions about it, even next to your sheets.
         </p>
         <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="What is in the document">
           {TEMPLATES.map((t) => {

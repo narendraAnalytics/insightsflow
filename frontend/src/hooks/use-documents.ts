@@ -5,12 +5,14 @@ import { useAuth } from "@clerk/nextjs";
 import { apiFetch } from "@/lib/api";
 import type { DataSource } from "@/hooks/use-google-sheets-connection";
 
-export type DocumentTemplate = "invoice" | "bank_statement" | "receipt" | "custom";
+export type DocumentTemplate = "invoice" | "bank_statement" | "receipt" | "text" | "custom";
 
 export type UploadedDocument = {
   id: string;
   filename: string;
   template: DocumentTemplate;
+  /** table = extracted rows (Extract); text = searchable passages with page numbers (Digitise). */
+  kind: "table" | "text";
   status: "processing" | "ready" | "failed";
   error: string | null;
   page_count: number;

@@ -5,7 +5,7 @@ import asyncio
 import json
 import uuid
 from collections.abc import AsyncIterator
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 import pandas as pd
@@ -20,8 +20,9 @@ from langchain_core.messages import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agent.graph import TableInfo, build_graph, build_system_prompt, shared_columns
+from app.agent.graph import TableInfo, TextInfo, build_graph, build_system_prompt, shared_columns
 from app.agent.llm import build_llm
+from app.agent.texts import TextSet
 from app.agent.tools import TableSet, build_frame, build_tools, describe_schema, tool_label
 from app.core.errors import AppError, NotFoundError
 from app.db.session import get_sessionmaker
@@ -67,10 +68,12 @@ class SheetContext:
     slack_channel: dict[str, str] | None = None
     # The user's chosen Notion parent page ({id, title}); lets the agent DRAFT a page.
     notion_page: dict[str, str] | None = None
+    # Digitised text documents: name -> passages [{"page", "section", "text"}].
+    texts: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
 
     @property
     def label(self) -> str:
-        names = [*self.tables, *(["Gmail"] if self.gmail_token else [])]
+        names = [*self.tables, *self.texts, *(["Gmail"] if self.gmail_token else [])]
         return " + ".join(names)
 
 
@@ -80,6 +83,25 @@ class _NamedTable:
 
     name: str
     tab_title: str = ""
+
+
+def _document_name(doc: Any) -> str:
+    return doc.filename.rsplit(".", 1)[0] or doc.filename
+
+
+def _text_passages(docs: list[Any], taken: set[str]) -> dict[str, list[dict[str, Any]]]:
+    """Name -> passages for text documents; a name that clashes gets a number."""
+    out: dict[str, list[dict[str, Any]]] = {}
+    for doc in docs:
+        name, n = _document_name(doc), 2
+        while name in out or name in taken:
+            name, n = f"{_document_name(doc)} ({n})", n + 1
+        out[name] = [{"page": r[0], "section": r[1], "text": r[2]} for r in doc.rows]
+    return out
+
+
+def _text_infos(ctx: "SheetContext") -> list[TextInfo]:
+    return [TextInfo(name, len({p["page"] for p in ps}), len(ps)) for name, ps in ctx.texts.items()]
 
 
 def _table_names(sources: list[Any]) -> list[str]:
@@ -156,13 +178,17 @@ async def load_sheet_context(
         named += sources
         frames += [build_frame(p.headers, p.rows) for p in previews]
         truncated = any(len(f) >= MAX_SHEET_ROWS for f in frames)
-    for doc in documents:
-        named.append(_NamedTable(doc.filename.rsplit(".", 1)[0] or doc.filename))
+    table_docs = [d for d in documents if d.kind != "text"]
+    text_docs = [d for d in documents if d.kind == "text"]
+    for doc in table_docs:
+        named.append(_NamedTable(_document_name(doc)))
         frames.append(build_frame(list(doc.headers), [list(r) for r in doc.rows]))
     if named:
         tables = dict(zip(_table_names(named), frames, strict=True))
+    texts = _text_passages(text_docs, taken=set(tables))
     return SheetContext(
         tables=tables,
+        texts=texts,
         truncated=truncated,
         gmail_token=gmail_token,
         gmail_can_send=can_send,
@@ -250,7 +276,14 @@ def suggest_questions(ctx: SheetContext) -> list[str]:
         "Who sent me the latest email?",
         "What are the subjects of my last 3 emails?",
     ]
+    document_questions = [
+        "Summarise this document in a few lines",
+        "What are the key dates and amounts mentioned?",
+        "What obligations does each party have?",
+    ]
     if not ctx.tables:
+        if ctx.texts:
+            return document_questions[:3]
         return email_questions if ctx.gmail_token else []
     infos = _table_infos(ctx)
 
@@ -380,6 +413,7 @@ async def stream_answer(
                 can_draft_email=ctx.gmail_can_send,
                 slack_channel=ctx.slack_channel,
                 notion_page=ctx.notion_page,
+                texts=TextSet(ctx.texts),
             ),
         )
         system = build_system_prompt(
@@ -389,6 +423,7 @@ async def stream_answer(
             send=ctx.gmail_can_send,
             slack=bool(ctx.slack_channel),
             notion=bool(ctx.notion_page),
+            documents=_text_infos(ctx),
         )
         messages = [
             SystemMessage(content=system),

@@ -21,6 +21,7 @@ class DocumentOut(BaseModel):
     id: uuid.UUID
     filename: str
     template: str
+    kind: str  # table | text
     status: str  # processing | ready | failed
     error: str | None
     page_count: int
@@ -34,6 +35,7 @@ class DocumentOut(BaseModel):
             id=d.id,
             filename=d.filename,
             template=d.template,
+            kind=d.kind,
             status=d.status,
             error=d.error,
             page_count=d.page_count,

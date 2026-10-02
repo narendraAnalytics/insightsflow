@@ -124,7 +124,8 @@ from app.main import create_app  # noqa: E402
 
 def _fake_doc(**over):
     base = dict(
-        id=uuid.uuid4(), filename="a.pdf", template="invoice", status="processing", error=None,
+        id=uuid.uuid4(), filename="a.pdf", template="invoice", kind="table",
+        status="processing", error=None,
         page_count=0, headers=[], rows=[], row_count=0, created_at=datetime.now(UTC),
     )  # fmt: skip
     return SimpleNamespace(**{**base, **over})
