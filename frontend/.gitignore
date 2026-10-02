@@ -40,6 +40,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# hero scroll-animation source JPGs (~31 MB); the app serves the WebP copies in public/hero-frames/
+/scrollanimation/
+
 # docs / notes — not tracked in this folder (overrides root's README.md
 # exception; frontend has no published docs yet)
 *.md
