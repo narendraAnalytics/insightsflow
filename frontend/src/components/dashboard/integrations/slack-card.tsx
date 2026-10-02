@@ -25,6 +25,18 @@ function ConnectGuide({ cost }: { cost: number }) {
         send the request and connect again once it&apos;s approved. Nothing is charged until then. InsightFlow only
         posts after you review a draft, and never reads your messages.
       </p>
+      <p className={`${zeyada} text-[19px] leading-snug text-(--flow-ink)/65`}>
+        Don&apos;t have a Slack workspace yet?{" "}
+        <a
+          href="https://slack.com/get-started#/createnew"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-(--flow-magenta) underline underline-offset-2"
+        >
+          Create one (free)
+        </a>
+        , then come back and click Connect.
+      </p>
     </div>
   );
 }
