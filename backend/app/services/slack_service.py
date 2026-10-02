@@ -142,6 +142,24 @@ async def set_channel(
     return connection.config
 
 
+TEST_MESSAGE = "InsightFlow is connected to this channel. \u2705"
+
+
+async def send_test(
+    session: AsyncSession, clerk_user_id: str, connection_id: uuid.UUID
+) -> dict[str, str]:
+    """Posts a fixed hello to the workspace's chosen channel so the user can see it works.
+    Only runs from the user's own click on "Send a test message"; the text is ours, never
+    the model's or the client's."""
+    connection, token = await _connection_and_token(session, clerk_user_id, connection_id)
+    cfg = connection.config or {}
+    if not cfg.get("channel_id"):
+        raise SlackChannelRequired("Choose a channel first.")
+    await asyncio.to_thread(slack.post_message, token, cfg["channel_id"], TEST_MESSAGE)
+    logger.info("slack_test_posted", connection_id=str(connection.id))
+    return {"channel_name": cfg.get("channel_name", "")}
+
+
 async def default_channel(session: AsyncSession, clerk_user_id: str) -> dict[str, str] | None:
     """{id, name} of the default channel if Slack is connected and one is chosen.
     Never raises — it only decides whether the agent may offer `draft_slack_message`."""

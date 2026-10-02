@@ -10,6 +10,25 @@ import { GlassSlab, StatusPill } from "@/components/dashboard/integrations/googl
 
 const zeyada = "font-(family-name:--font-zeyada) font-normal";
 
+/** What happens on Slack's page, so the user isn't surprised by it. Shown before connecting. */
+function ConnectGuide({ cost }: { cost: number }) {
+  return (
+    <div className="flex flex-col gap-1.5 rounded-2xl bg-(--flow-peach)/45 px-4 py-3">
+      <p className={`${zeyada} text-[22px] leading-none text-(--flow-ink)`}>How connecting works</p>
+      <ol className={`list-decimal space-y-0.5 pl-5 ${zeyada} text-[20px] leading-snug text-(--flow-ink)/80`}>
+        <li>Slack opens. Choose <strong className="font-normal text-(--flow-magenta)">your workspace</strong> from the menu at its top right.</li>
+        <li>Click Allow. You&apos;ll come back here, and {cost} credits are used once it&apos;s saved.</li>
+        <li>Pick a channel, then send a test message to see it work.</li>
+      </ol>
+      <p className={`${zeyada} text-[19px] leading-snug text-(--flow-ink)/65`}>
+        Slack asks for an admin&apos;s approval in some workspaces. If you see &ldquo;request to install&rdquo;,
+        send the request and connect again once it&apos;s approved. Nothing is charged until then. InsightFlow only
+        posts after you review a draft, and never reads your messages.
+      </p>
+    </div>
+  );
+}
+
 /** One connected workspace: its default channel, plus Make default / Reconnect / Disconnect. */
 function WorkspaceRow({
   account,
@@ -17,6 +36,7 @@ function WorkspaceRow({
   busy,
   loadChannels,
   setChannel,
+  sendTest,
   onReconnect,
   onMakeDefault,
   onDisconnect,
@@ -27,6 +47,7 @@ function WorkspaceRow({
   busy: boolean;
   loadChannels: (id: string) => Promise<SlackChannel[]>;
   setChannel: (id: string, channelId: string) => Promise<void>;
+  sendTest: (id: string) => Promise<{ channel_name: string }>;
   onReconnect: () => void;
   onMakeDefault: () => void;
   onDisconnect: () => void;
@@ -35,6 +56,7 @@ function WorkspaceRow({
   const [channels, setChannels] = useState<SlackChannel[] | null>(null);
   const [channelsError, setChannelsError] = useState<string | null>(null);
   const [changing, setChanging] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
   const selectId = useId();
 
   const live = account.status === "connected";
@@ -136,7 +158,29 @@ function WorkspaceRow({
         )
       )}
 
+      {testResult && (
+        <p role="status" className={`${zeyada} text-[20px] leading-snug text-(--flow-magenta)`}>
+          {testResult}
+        </p>
+      )}
+
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        {live && channelName && !showPicker && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setTestResult(null);
+              void run(async () => {
+                const res = await sendTest(account.id);
+                setTestResult(`Test message sent to #${res.channel_name}. Check Slack.`);
+              });
+            }}
+            className={`${zeyada} text-[20px] leading-none text-(--flow-magenta) hover:underline disabled:opacity-60`}
+          >
+            Send a test message
+          </button>
+        )}
         {live && !showPicker && (
           <button
             type="button"
@@ -184,7 +228,8 @@ function WorkspaceRow({
 }
 
 export function SlackCard() {
-  const { accounts, loading, error, connect, disconnect, makeDefault, loadChannels, setChannel } = useSlackConnection();
+  const { accounts, loading, error, connect, disconnect, makeDefault, loadChannels, setChannel, sendTest } =
+    useSlackConnection();
   const { connectCost } = useCredits();
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -235,6 +280,7 @@ export function SlackCard() {
             Lets InsightFlow post a message to a channel you choose. It can only post after you review and click Post —
             it never reads your messages.
           </p>
+          <ConnectGuide cost={connectCost} />
           <div>
             <button
               type="button"
@@ -258,6 +304,7 @@ export function SlackCard() {
                 busy={busy}
                 loadChannels={loadChannels}
                 setChannel={setChannel}
+                sendTest={sendTest}
                 run={run}
                 onReconnect={() => void run(() => connect({ reconnect: true }))}
                 onMakeDefault={() => void run(() => makeDefault(account.id))}
@@ -266,7 +313,8 @@ export function SlackCard() {
             ))}
           </ul>
           <p className={`${zeyada} text-[20px] leading-snug text-(--flow-ink)/70`}>
-            In AI Insights, ask &ldquo;post this to Slack&rdquo; and review the draft before it goes out.
+            In AI Insights, ask &ldquo;post this to Slack&rdquo; and review the draft before it goes out. To add another
+            workspace, choose it from the menu at the top right of Slack&apos;s page (it must be one you belong to).
           </p>
           <div>
             <button
@@ -288,7 +336,7 @@ export function SlackCard() {
             error ??
             (flag === "limit"
               ? "You've reached the limit of 5 Slack workspaces. Disconnect one first."
-              : "Slack access wasn't granted. Connect again to allow posting.")}
+              : "Slack didn't finish connecting. If your workspace needs an admin to approve apps, send the request and connect again once it's approved. Nothing was charged.")}
         </p>
       )}
     </GlassSlab>

@@ -200,8 +200,14 @@ def validated_message(channel_id: str, text: str) -> tuple[str, str]:
 _POST_ERRORS = {
     "channel_not_found": "That Slack channel wasn't found. Pick another one.",
     "is_archived": "That Slack channel is archived. Pick another one.",
-    "not_in_channel": "InsightFlow isn't in that channel. Invite it with /invite or pick another.",
-    "restricted_action": "Your Slack workspace doesn't allow InsightFlow to post there.",
+    "not_in_channel": (
+        "InsightFlow isn't in that channel yet. In Slack, open the channel and type "
+        "/invite @InsightFlow, or pick another channel."
+    ),
+    "restricted_action": (
+        "Your Slack workspace doesn't allow InsightFlow to post there. "
+        "Ask a workspace admin, or pick another channel."
+    ),
     "msg_too_long": "That message is too long for Slack.",
 }
 

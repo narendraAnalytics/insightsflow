@@ -396,6 +396,21 @@ async def slack_disconnect(
     await slack_service.disconnect(db, principal.user_id, connection_id)
 
 
+class SlackTestOut(BaseModel):
+    channel_name: str
+
+
+@router.post("/slack/{connection_id}/test", response_model=SlackTestOut)
+async def slack_test_message(
+    connection_id: uuid.UUID,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> SlackTestOut:
+    """Posts a fixed 'connected' message to the workspace's channel (the user's click)."""
+    result = await slack_service.send_test(db, principal.user_id, connection_id)
+    return SlackTestOut(channel_name=result["channel_name"])
+
+
 @router.post("/slack/{connection_id}/default", status_code=204)
 async def slack_make_default(
     connection_id: uuid.UUID,

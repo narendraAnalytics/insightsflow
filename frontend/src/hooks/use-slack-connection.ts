@@ -109,7 +109,27 @@ export function useSlackConnection() {
     [getToken]
   );
 
+  /** Posts a fixed "connected" message to the workspace's chosen channel (the user's click). */
+  const sendTest = useCallback(
+    async (id: string) => {
+      const token = await getToken();
+      return apiFetch<{ channel_name: string }>(`${BASE}/${id}/test`, token, { method: "POST" });
+    },
+    [getToken]
+  );
+
   const connection = useMemo(() => accounts.find((a) => a.is_default) ?? accounts[0] ?? null, [accounts]);
 
-  return { accounts, connection, loading, error, connect, disconnect, makeDefault, loadChannels, setChannel };
+  return {
+    accounts,
+    connection,
+    loading,
+    error,
+    connect,
+    disconnect,
+    makeDefault,
+    loadChannels,
+    setChannel,
+    sendTest,
+  };
 }
