@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion, useMotionValueEvent, useReducedMotion, useScroll } from "framer-motion";
 import { ArrowRight, ArrowUpRight, List, X } from "@phosphor-icons/react";
-import { Show, SignInButton, SignUpButton, UserButton, useUser } from "@clerk/nextjs";
+import { Show, SignUpButton, UserButton, useUser } from "@clerk/nextjs";
 import { cn } from "@/lib/utils";
 import { EASE_OUT } from "@/lib/motion";
 import { LogoVideo } from "@/components/site/logo-video";
@@ -121,18 +121,10 @@ export function Navbar() {
 
         <div className="hidden items-center gap-1.5 lg:flex">
           <Show when="signed-out">
-            <SignInButton mode="redirect">
-              <button
-                type="button"
-                className="min-h-10 rounded-full px-4 text-[14px] font-semibold text-(--flow-ink) transition-colors hover:bg-(--flow-magenta-100)"
-              >
-                Sign in
-              </button>
-            </SignInButton>
             <Magnetic strength={8}>
               <SignUpButton mode="redirect" forceRedirectUrl="/">
                 <button type="button" className={cn(primaryButtonClass, "min-h-10 px-5 py-2 text-[14px]")}>
-                  Start free
+                  Get started
                   <ArrowRight weight="bold" className="size-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
                 </button>
               </SignUpButton>
@@ -201,19 +193,10 @@ export function Navbar() {
               <Show when="signed-out">
                 <SignUpButton mode="redirect" forceRedirectUrl="/">
                   <button type="button" onClick={() => setMobileOpen(false)} className={cn(primaryButtonClass, "w-full py-4 text-[16px]")}>
-                    Start free
+                    Get started
                     <ArrowRight weight="bold" className="size-4" />
                   </button>
                 </SignUpButton>
-                <SignInButton mode="redirect">
-                  <button
-                    type="button"
-                    onClick={() => setMobileOpen(false)}
-                    className="min-h-12 rounded-full border border-(--border-strong) text-[16px] font-semibold text-(--flow-ink)"
-                  >
-                    Sign in
-                  </button>
-                </SignInButton>
               </Show>
               <Show when="signed-in">
                 <a href="/dashboard" className={cn(primaryButtonClass, "w-full py-4 text-[16px]")}>
