@@ -32,6 +32,11 @@ class ScheduledEmail(Base):
         UUID(as_uuid=True), ForeignKey("chat_conversations.id", ondelete="SET NULL")
     )
     step_id: Mapped[str] = mapped_column(String(200))
+    # The Gmail account it goes out from (the user's choice on the draft card). NULL = the
+    # user's default account at send time. SET NULL if that account is disconnected.
+    connection_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("connections.id", ondelete="SET NULL")
+    )
 
     to_address: Mapped[str] = mapped_column(String(320))
     subject: Mapped[str] = mapped_column(String(300))

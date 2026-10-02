@@ -21,7 +21,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.errors import AppError, NotFoundError
-from app.db.models.connection import Connection
 from app.db.models.scheduled_email import ScheduledEmail
 from app.db.session import get_sessionmaker
 from app.integrations.google import gmail as google_gmail
@@ -81,6 +80,7 @@ async def schedule_draft(
     subject: str,
     body: str,
     send_at: datetime,
+    connection_id: uuid.UUID | None = None,
 ) -> dict[str, Any]:
     when = validate_send_at(send_at)
     recipient, clean_subject, clean_body = google_gmail.validated_fields(to, subject, body)
@@ -88,13 +88,14 @@ async def schedule_draft(
 
     message, index = await email_service.locate_draft(session, conversation_id, step_id)
     email_service.ensure_unsent(message.steps[index]["draft"])
-    await email_service.require_send_connection(session, clerk_user_id)
+    connection = await email_service.require_send_connection(session, clerk_user_id, connection_id)
 
     user = await get_or_create_user(session, clerk_user_id)
     row = ScheduledEmail(
         user_id=user.id,
         conversation_id=conversation_id,
         step_id=step_id,
+        connection_id=connection.id,
         to_address=recipient,
         subject=clean_subject,
         body=clean_body,
@@ -177,13 +178,13 @@ async def _deliver(
         if row is None or row.status != "sending":
             return False
         try:
-            connection = (
-                await session.execute(
-                    select(Connection).where(
-                        Connection.user_id == row.user_id, Connection.provider == "gmail"
-                    )
-                )
-            ).scalar_one_or_none()
+            # The account chosen when it was scheduled; if none was recorded (older rows, or that
+            # account was disconnected) the user's default Gmail account.
+            accounts = await connection_service.provider_connections(session, row.user_id, "gmail")
+            connection = next(
+                (c for c in accounts if c.id == row.connection_id),
+                accounts[0] if accounts else None,
+            )
             if (
                 connection is None
                 or connection.status != "connected"

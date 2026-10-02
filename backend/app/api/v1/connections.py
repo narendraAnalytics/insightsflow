@@ -84,6 +84,7 @@ class DataSourceOut(BaseModel):
 
 
 class ConnectionResponse(BaseModel):
+    id: uuid.UUID
     provider: str
     status: str
     # Gmail: the account's address. Slack: the workspace name.
@@ -95,12 +96,18 @@ class ConnectionResponse(BaseModel):
     # Notion only: the parent page approved reports are saved under (None until chosen).
     notion_page_id: str | None = None
     notion_page_title: str | None = None
+    # Gmail may have several accounts; exactly one is the default (used unless a draft picks).
+    is_default: bool = False
     sources: list[DataSourceOut]
 
     @classmethod
-    def from_model(cls, c: Connection, sources: list[DataSource]) -> "ConnectionResponse":
+    def from_model(
+        cls, c: Connection, sources: list[DataSource], is_default: bool = False
+    ) -> "ConnectionResponse":
         cfg = (c.config or {}) if c.provider in ("slack", "notion") else {}
         return cls(
+            id=c.id,
+            is_default=is_default,
             provider=c.provider,
             status=c.status,
             external_account_email=c.external_account_email,
@@ -202,12 +209,22 @@ async def list_connections(
 ) -> list[ConnectionResponse]:
     connections = await connection_service.list_connections(db, principal.user_id)
     out: list[ConnectionResponse] = []
+    # The default Gmail account: the flagged one, else the oldest.
+    gmail_default = next((c.id for c in connections if c.provider == "gmail"), None)
+    for c in connections:
+        if c.provider == "gmail" and connection_service.is_default(c):
+            gmail_default = c.id
+            break
     for connection in connections:
         # Only Sheets connections own data sources; other providers (Gmail) have none.
         sources: list[DataSource] = []
         if connection.provider == "google_sheets":
             sources = await data_source_service.refresh_stale_sources(db, principal.user_id)
-        out.append(ConnectionResponse.from_model(connection, sources))
+        out.append(
+            ConnectionResponse.from_model(
+                connection, sources, is_default=connection.id == gmail_default
+            )
+        )
     return out
 
 
@@ -217,6 +234,18 @@ async def google_disconnect(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     await connection_service.disconnect(db, principal.user_id)
+
+
+async def _require_credits_for_new_gmail(db: AsyncSession, clerk_user_id: str) -> None:
+    """Another Gmail account costs credits and is capped; checked before OAuth starts."""
+    user = await connection_service.get_or_create_user(db, clerk_user_id)
+    accounts = await connection_service.provider_connections(db, user.id, "gmail")
+    if len(accounts) >= connection_service.MAX_ACCOUNTS_PER_PROVIDER:
+        raise connection_service.TooManyAccounts(
+            f"You can connect up to {connection_service.MAX_ACCOUNTS_PER_PROVIDER} Gmail "
+            "accounts. Disconnect one first."
+        )
+    await credit_service.require_credits(db, clerk_user_id, credit_service.CONNECT_COST)
 
 
 async def _require_credits_if_new(db: AsyncSession, clerk_user_id: str, provider: str) -> None:
@@ -230,10 +259,14 @@ async def _require_credits_if_new(db: AsyncSession, clerk_user_id: str, provider
 
 @router.get("/gmail/connect-url", response_model=ConnectUrlResponse)
 async def gmail_connect_url(
+    # reconnect=true refreshes an account that's already connected (e.g. its login expired)
+    # and costs nothing; without it the OAuth adds a new account.
+    reconnect: bool = Query(default=False),
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> ConnectUrlResponse:
-    await _require_credits_if_new(db, principal.user_id, "gmail")
+    if not reconnect:
+        await _require_credits_for_new_gmail(db, principal.user_id)
     url = await connection_service.start_google_connect(principal.user_id, "gmail")
     return ConnectUrlResponse(url=url)
 
@@ -257,15 +290,27 @@ async def gmail_callback(
         )
     except credit_service.InsufficientCredits:
         return RedirectResponse(url=f"{base}?billing=insufficient")
+    except connection_service.TooManyAccounts:
+        return RedirectResponse(url=f"{base}?gmail_error=limit")
     return RedirectResponse(url=f"{base}?connected=gmail")
 
 
-@router.delete("/gmail", status_code=204)
+@router.delete("/gmail/{connection_id}", status_code=204)
 async def gmail_disconnect(
+    connection_id: uuid.UUID,
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    await connection_service.disconnect(db, principal.user_id, "gmail")
+    await connection_service.disconnect(db, principal.user_id, "gmail", connection_id)
+
+
+@router.post("/gmail/{connection_id}/default", status_code=204)
+async def gmail_make_default(
+    connection_id: uuid.UUID,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await connection_service.set_default(db, principal.user_id, connection_id)
 
 
 class SlackChannelOut(BaseModel):

@@ -206,6 +206,8 @@ type AppRow = {
   /** Account / workspace plus what it is set up to use, e.g. "Acme · #general". */
   detail: string | null;
   connect: () => Promise<void>;
+  /** Connected apps that allow several accounts get a "+ Connect new" button (costs credits). */
+  addAnother?: () => Promise<void>;
 };
 
 /** Every app with its real state: connected (with the account) or a Connect button.
@@ -215,11 +217,11 @@ function AppsPanel({ apps }: { apps: AppRow[] }) {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const connect = async (app: AppRow) => {
+  const connect = async (app: AppRow, run: () => Promise<void> = app.connect) => {
     setError(null);
     setBusyKey(app.key);
     try {
-      await app.connect();
+      await run();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't start the connection. Try again.");
       setBusyKey(null);
@@ -261,7 +263,19 @@ function AppsPanel({ apps }: { apps: AppRow[] }) {
               <p className={`truncate ${Z} text-[20px] leading-snug font-normal text-(--flow-ink)/80`} title={app.detail ?? undefined}>
                 {app.detail ?? "Connected"}
               </p>
-            ) : (
+            ) : null}
+            {app.connected && app.addAnother && (
+              <button
+                type="button"
+                onClick={() => void connect(app, app.addAnother)}
+                disabled={busyKey !== null}
+                className={`mt-auto inline-flex w-fit items-center gap-1.5 rounded-full bg-(--flow-cream) px-3.5 py-1.5 ${Z} text-[20px] leading-none font-normal text-(--flow-magenta) shadow-[0_10px_18px_-12px_var(--flow-magenta)] disabled:opacity-60`}
+              >
+                <Plus weight="bold" className="size-3.5" />
+                {busyKey === app.key ? "Opening…" : `Connect new · ${connectCost} credits`}
+              </button>
+            )}
+            {app.connected ? null : (
               <>
                 <p className={`${Z} text-[20px] leading-snug font-normal text-(--flow-ink)/55`}>Not connected</p>
                 <button
@@ -289,7 +303,7 @@ function AppsPanel({ apps }: { apps: AppRow[] }) {
 
 export function ProjectsGrid() {
   const { connection, loading, connect: connectSheets } = useGoogleSheetsConnection();
-  const { connection: gmailConnection, connect: connectGmail } = useGmailConnection();
+  const { accounts: gmailAccounts, connection: gmailConnection, connect: connectGmail } = useGmailConnection();
   const gmailConnected = gmailConnection?.status === "connected";
   const { connection: slackConnection, connect: connectSlack } = useSlackConnection();
   const slackConnected = slackConnection?.status === "connected";
@@ -324,8 +338,13 @@ export function ProjectsGrid() {
       Glyph: GmailGlyph,
       connected: gmailConnected,
       costsOnConnect: true,
-      detail: gmailConnection?.external_account_email ?? null,
-      connect: connectGmail,
+      detail: gmailConnection
+        ? `${gmailConnection.external_account_email ?? "Gmail"}${
+            gmailAccounts.length > 1 ? ` · +${gmailAccounts.length - 1} more` : ""
+          }`
+        : null,
+      connect: () => connectGmail(),
+      addAnother: () => connectGmail(),
     },
     {
       key: "slack",

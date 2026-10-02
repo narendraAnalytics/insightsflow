@@ -143,6 +143,8 @@ class SendEmailRequest(BaseModel):
     to: str = Field(min_length=3, max_length=320)
     subject: str = Field(min_length=1, max_length=300)
     body: str = Field(min_length=1, max_length=10000)
+    # Which connected Gmail account to send from; None = the user's default account.
+    connection_id: uuid.UUID | None = None
 
 
 class SendEmailResponse(BaseModel):
@@ -165,6 +167,7 @@ async def send_email(
         body.to,
         body.subject,
         body.body,
+        body.connection_id,
     )
     return SendEmailResponse(**sent)
 
@@ -250,6 +253,7 @@ async def schedule_email(
         body.subject,
         body.body,
         body.send_at,
+        body.connection_id,
     )
     return ScheduleEmailResponse(**scheduled)
 

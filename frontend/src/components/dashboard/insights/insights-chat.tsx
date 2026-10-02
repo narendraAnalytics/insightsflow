@@ -207,8 +207,8 @@ function AssistantMessage({
             <EmailDraftCard
               key={s.id}
               draft={s.draft}
-              onSend={(fields) => draftActions.send(s.id, fields)}
-              onSchedule={(fields, sendAtIso) => draftActions.schedule(s.id, fields, sendAtIso)}
+              onSend={(fields, sender) => draftActions.send(s.id, fields, sender)}
+              onSchedule={(fields, sendAtIso, sender) => draftActions.schedule(s.id, fields, sendAtIso, sender)}
               onCancelSchedule={() => draftActions.cancel(s.id, scheduledIdOf(s.draft))}
             />
           ) : s.emails?.length ? (

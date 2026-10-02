@@ -12,7 +12,8 @@ import {
   PaperPlaneTilt,
   WarningCircle,
 } from "@phosphor-icons/react";
-import type { DraftFields, EmailDraft } from "@/hooks/use-insights-chat";
+import type { DraftFields, EmailDraft, Sender } from "@/hooks/use-insights-chat";
+import { useGmailConnection } from "@/hooks/use-gmail-connection";
 
 const ADDRESS = /^[^@\s,;<>"']+@[^@\s,;<>"']+\.[^@\s,;<>"']+$/;
 
@@ -106,12 +107,19 @@ export function EmailDraftCard({
   onCancelSchedule,
 }: {
   draft: EmailDraft;
-  onSend: (fields: DraftFields) => Promise<void>;
-  onSchedule: (fields: DraftFields, sendAtIso: string) => Promise<void>;
+  onSend: (fields: DraftFields, sender?: Sender) => Promise<void>;
+  onSchedule: (fields: DraftFields, sendAtIso: string, sender?: Sender) => Promise<void>;
   onCancelSchedule: () => Promise<void>;
 }) {
   const reduce = useReducedMotion();
   const uid = useId();
+  // With several Gmail accounts the user picks which one sends; the default is preselected.
+  const { accounts } = useGmailConnection();
+  const senders = accounts.filter((a) => a.status === "connected");
+  const [fromId, setFromId] = useState<string | null>(null);
+  const chosen = senders.find((a) => a.id === fromId) ?? senders.find((a) => a.is_default) ?? senders[0];
+  const sender: Sender | undefined =
+    senders.length > 1 && chosen ? { id: chosen.id, email: chosen.external_account_email ?? "" } : undefined;
   const [to, setTo] = useState(draft.to);
   const [subject, setSubject] = useState(draft.subject);
   const [body, setBody] = useState(draft.body);
@@ -153,7 +161,7 @@ export function EmailDraftCard({
     setError(null);
     setBusy("send");
     try {
-      await onSend(fields());
+      await onSend(fields(), sender);
     } catch (err) {
       fail(err, "Couldn't send the email. Try again.");
     }
@@ -165,7 +173,7 @@ export function EmailDraftCard({
     setBusy("schedule");
     try {
       // "…+05:30" so the server stores the right instant whatever this browser's timezone is.
-      await onSchedule(fields(), `${toInputValue(pick)}:00+05:30`);
+      await onSchedule(fields(), `${toInputValue(pick)}:00+05:30`, sender);
       setPanelOpen(false);
       setBusy(null);
     } catch (err) {
@@ -244,6 +252,9 @@ export function EmailDraftCard({
               <p className="truncate font-(family-name:--font-zeyada) text-[26px] leading-none font-normal text-(--flow-ink)">
                 Sent to {draft.to}
               </p>
+              {draft.from && (
+                <p className="truncate text-[12.5px] text-(--flow-ink)/65">from {draft.from}</p>
+              )}
               <p className="mt-1 truncate text-[13.5px] font-semibold text-(--flow-ink)">{draft.subject}</p>
               <div className="mt-1 flex items-center gap-3">
                 <span className="font-(family-name:--font-zeyada) text-[20px] leading-none font-normal text-(--flow-ink)/60">
@@ -334,6 +345,26 @@ export function EmailDraftCard({
             </div>
 
             <div className="px-4 pt-1 pb-4">
+              {senders.length > 1 && (
+                <div className="grid grid-cols-[3.5rem_1fr] items-start border-b border-(--flow-ink)/10 focus-within:border-(--flow-magenta)/60">
+                  <label htmlFor={`${uid}-from`} className={label}>
+                    From
+                  </label>
+                  <select
+                    id={`${uid}-from`}
+                    value={chosen?.id ?? ""}
+                    onChange={(e) => setFromId(e.target.value)}
+                    className={`${field} cursor-pointer`}
+                  >
+                    {senders.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.external_account_email}
+                        {a.is_default ? " (default)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="grid grid-cols-[3.5rem_1fr] items-start border-b border-(--flow-ink)/10 focus-within:border-(--flow-magenta)/60">
                 <label htmlFor={`${uid}-to`} className={label}>
                   To

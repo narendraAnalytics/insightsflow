@@ -33,7 +33,12 @@ export type EmailDraft = {
   send_at?: string;
   scheduled_id?: string;
   error?: string;
+  /** The Gmail account it was sent from (set once sent). */
+  from?: string | null;
 };
+
+/** Which connected Gmail account an email goes out from; omitted = the user's default. */
+export type Sender = { id: string; email: string };
 
 export type DraftFields = Pick<EmailDraft, "to" | "subject" | "body">;
 
@@ -71,8 +76,8 @@ export type DraftActions = {
   saveNotion: (stepId: string, title: string, body: string) => Promise<void>;
   /** Posts the (possibly edited) message to `channelId`. */
   postSlack: (stepId: string, channelId: string, text: string) => Promise<void>;
-  send: (stepId: string, fields: DraftFields) => Promise<void>;
-  schedule: (stepId: string, fields: DraftFields, sendAtIso: string) => Promise<void>;
+  send: (stepId: string, fields: DraftFields, sender?: Sender) => Promise<void>;
+  schedule: (stepId: string, fields: DraftFields, sendAtIso: string, sender?: Sender) => Promise<void>;
   cancel: (stepId: string, scheduledId: string) => Promise<void>;
 };
 
@@ -408,18 +413,18 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[], gmailRe
         });
       },
       /** Sends now. */
-      send: async (stepId, fields) => {
+      send: async (stepId, fields, sender) => {
         const conversation = conversationIdRef.current;
         if (!conversation) throw new Error("Open the chat again to send this email.");
         const token = await getToken();
         const res = await apiFetch<{ status: string; sent_at: string }>("/api/v1/insights/email/send", token, {
           method: "POST",
-          body: { conversation_id: conversation, step_id: stepId, ...fields },
+          body: { conversation_id: conversation, step_id: stepId, ...fields, connection_id: sender?.id },
         });
-        setStepDraft(stepId, { ...fields, status: "sent", sent_at: res.sent_at });
+        setStepDraft(stepId, { ...fields, status: "sent", sent_at: res.sent_at, from: sender?.email });
       },
       /** Approves sending later; `sendAtIso` carries its UTC offset (IST = +05:30). */
-      schedule: async (stepId, fields, sendAtIso) => {
+      schedule: async (stepId, fields, sendAtIso, sender) => {
         const conversation = conversationIdRef.current;
         if (!conversation) throw new Error("Open the chat again to schedule this email.");
         const token = await getToken();
@@ -428,7 +433,13 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[], gmailRe
           token,
           {
             method: "POST",
-            body: { conversation_id: conversation, step_id: stepId, ...fields, send_at: sendAtIso },
+            body: {
+              conversation_id: conversation,
+              step_id: stepId,
+              ...fields,
+              send_at: sendAtIso,
+              connection_id: sender?.id,
+            },
           }
         );
         setStepDraft(stepId, { ...fields, status: "scheduled", scheduled_id: res.id, send_at: res.send_at });

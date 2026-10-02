@@ -58,10 +58,12 @@ async def complete_connect(session: AsyncSession, clerk_user_id: str, code: str)
     connection = result.scalar_one_or_none()
     if connection is None:
         connection = Connection(user_id=user.id, provider=PROVIDER)
-        session.add(connection)
+        # Debit BEFORE adding the row: spend() flushes, and a new connection can't be flushed
+        # until its (NOT NULL) token fields are filled in below. Both land in one commit.
         await credit_service.spend(
             session, user.id, credit_service.CONNECT_COST, f"connect_{PROVIDER}", commit=False
         )
+        session.add(connection)
 
     previous = connection.config or {}
     config: dict[str, Any] = {

@@ -73,9 +73,14 @@ def ensure_unsent(draft: dict[str, Any]) -> None:
         )
 
 
-async def require_send_connection(session: AsyncSession, clerk_user_id: str) -> Connection:
+async def require_send_connection(
+    session: AsyncSession, clerk_user_id: str, connection_id: uuid.UUID | None = None
+) -> Connection:
+    """The Gmail account to send from: the one chosen on the draft card, else the default."""
     try:
-        connection = await connection_service.get_connection(session, clerk_user_id, "gmail")
+        connection = await connection_service.get_connection(
+            session, clerk_user_id, "gmail", connection_id
+        )
     except NotFoundError:
         raise GmailNotSendable("Connect Gmail on the Integrations page to send email.") from None
     if connection.status != "connected" or not google_gmail.has_send_scope(connection.scopes):
@@ -99,6 +104,7 @@ async def send_draft(
     to: str,
     subject: str,
     body: str,
+    connection_id: uuid.UUID | None = None,
 ) -> dict[str, Any]:
     """Sends the user's final (possibly edited) version of a draft now and marks it sent."""
     # Ownership check (raises NotFoundError for someone else's conversation).
@@ -107,7 +113,7 @@ async def send_draft(
     message, index = await locate_draft(session, conversation_id, step_id)
     ensure_unsent(message.steps[index]["draft"])
 
-    connection = await require_send_connection(session, clerk_user_id)
+    connection = await require_send_connection(session, clerk_user_id, connection_id)
     access_token = await connection_service.get_valid_access_token(session, connection)
 
     gmail_id = await asyncio.to_thread(google_gmail.send_message, access_token, to, subject, body)
@@ -123,6 +129,7 @@ async def send_draft(
             "body": google_gmail.clean_body(body),
             "status": "sent",
             "sent_at": sent_at,
+            "from": connection.external_account_email,
         },
     )
     await session.commit()
