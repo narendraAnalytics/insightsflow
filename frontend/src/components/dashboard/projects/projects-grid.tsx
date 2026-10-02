@@ -205,6 +205,11 @@ export function ProjectsGrid() {
   const notionConnected = notionConnection?.status === "connected";
   const sources = connection?.sources ?? [];
   const projects = groupProjects(sources);
+  const linkedApps = [
+    gmailConnected && { name: "Gmail", Glyph: GmailGlyph },
+    slackConnected && { name: "Slack", Glyph: SlackGlyph },
+    notionConnected && { name: "Notion", Glyph: NotionGlyph },
+  ].filter((a) => a !== false);
 
   if (loading) {
     return <p className={`${Z} px-2 text-[24px] leading-none text-(--flow-ink)/70`}>Loading…</p>;
@@ -220,18 +225,36 @@ export function ProjectsGrid() {
           <FolderOpen weight="duotone" className="size-8 text-(--flow-magenta)" />
         </span>
         <div>
-          <p className={`text-gradient-flow ${Z} text-[36px] leading-none font-normal`}>No projects yet</p>
+          <p className={`text-gradient-flow ${Z} text-[36px] leading-none font-normal`}>
+            {linkedApps.length > 0 ? "Your apps are ready" : "Start your first project"}
+          </p>
           <p className={`mt-2 ${Z} text-[23px] leading-snug font-normal text-(--flow-ink)/80`}>
-            Connect a Google Sheet and it shows up here as a project.
+            {linkedApps.length > 0
+              ? "Each Google Sheet you add becomes a project, with its tabs inside. Add one and your connected apps can work with it."
+              : "Each Google Sheet you add becomes a project, with its tabs inside. Connect your apps to get going."}
           </p>
         </div>
+        {linkedApps.length > 0 && (
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {linkedApps.map(({ name, Glyph }) => (
+              <span
+                key={name}
+                className={`inline-flex items-center gap-1.5 rounded-full bg-(--flow-peach)/60 px-3 py-1 ${Z} text-[19px] leading-none font-normal text-(--flow-ink)`}
+              >
+                <Glyph className="size-4" />
+                {name}
+                <span className="size-1.5 rounded-full bg-(--flow-mint)" />
+              </span>
+            ))}
+          </div>
+        )}
         <Link
           href="/dashboard/integrations"
           className={`bg-gradient-flow inline-flex items-center gap-2 rounded-full px-6 py-2.5 ${Z} text-[24px] leading-none font-normal text-(--flow-cream)`}
           style={{ boxShadow: "0 18px 30px -14px var(--flow-magenta)" }}
         >
           <Plus weight="bold" className="size-4" />
-          Connect a sheet
+          {linkedApps.length > 0 ? "Add your first sheet" : "Connect your apps"}
         </Link>
       </div>
     );
