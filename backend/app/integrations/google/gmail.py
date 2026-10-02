@@ -146,6 +146,7 @@ def build_auth_url(state: str, code_verifier: str) -> str:
         scopes=SCOPES,
         redirect_uri=get_settings().google_gmail_redirect_uri,
         include_granted_scopes=False,
+        prompt="select_account consent",  # always let the user pick which account to add
     )
 
 

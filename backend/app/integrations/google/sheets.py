@@ -88,6 +88,7 @@ def build_auth_url(
     scopes: list[str] | None = None,
     redirect_uri: str | None = None,
     include_granted_scopes: bool = True,
+    prompt: str = "consent",
 ) -> str:
     """Runs synchronously (no network call) — safe to call directly.
     `code_verifier` must be the same value passed to `exchange_code` for
@@ -102,7 +103,10 @@ def build_auth_url(
         auth_kwargs["include_granted_scopes"] = "true"
     auth_url, _ = flow.authorization_url(
         access_type="offline",
-        prompt="consent",  # forces a refresh_token even on a re-connect
+        # "consent" forces a refresh_token even on a re-connect. Gmail also adds
+        # "select_account" so Google always shows the account chooser: without it Google can
+        # silently reuse the signed-in account, and "connect another" would just refresh it.
+        prompt=prompt,
         state=state,
         **auth_kwargs,
     )
