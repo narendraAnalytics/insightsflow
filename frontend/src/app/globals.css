@@ -347,6 +347,11 @@ html:has(.landing) {
   scroll-padding-top: 6rem;
 }
 
+/* Lenis (hero scroll stage) does its own smoothing; native smooth fights it. */
+html.lenis:has(.landing) {
+  scroll-behavior: auto;
+}
+
 .landing {
   color: var(--text-primary);
 }
