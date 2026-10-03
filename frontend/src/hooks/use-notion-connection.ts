@@ -12,6 +12,8 @@ export type NotionConnection = {
   external_account_email: string | null;
   notion_page_id: string | null;
   notion_page_title: string | null;
+  /** The Gmail account (connection id) this workspace belongs to, if any. */
+  gmail_connection_id: string | null;
   /** Exactly one workspace is the default: drafts go there unless the card picks another. */
   is_default: boolean;
 };
@@ -54,12 +56,13 @@ export function useNotionConnection() {
   /** Starts Notion's consent flow. By default it ADDS a workspace (50 credits, after it
    * saves); `reconnect: true` refreshes one that is already connected, for free. */
   const connect = useCallback(
-    async (opts?: { reconnect?: boolean }) => {
+    async (opts?: { reconnect?: boolean; gmailConnectionId?: string | null }) => {
       const token = await getToken();
-      const { url } = await apiFetch<{ url: string }>(
-        `${BASE}/connect-url${opts?.reconnect ? "?reconnect=true" : ""}`,
-        token
-      );
+      const query = new URLSearchParams();
+      if (opts?.reconnect) query.set("reconnect", "true");
+      if (opts?.gmailConnectionId) query.set("gmail_connection_id", opts.gmailConnectionId);
+      const qs = query.toString();
+      const { url } = await apiFetch<{ url: string }>(`${BASE}/connect-url${qs ? `?${qs}` : ""}`, token);
       // Notion's consent screen needs a top-level navigation, not fetch().
       window.location.href = url;
     },
@@ -108,7 +111,31 @@ export function useNotionConnection() {
     [getToken]
   );
 
+  /** Moves a workspace to another Gmail account, or to none (null). */
+  const setGmailLink = useCallback(
+    async (id: string, gmailConnectionId: string | null) => {
+      const token = await getToken();
+      await apiFetch<void>(`${BASE}/${id}/gmail`, token, {
+        method: "PUT",
+        body: { gmail_connection_id: gmailConnectionId },
+      });
+      setAccounts((rows) => rows.map((c) => (c.id === id ? { ...c, gmail_connection_id: gmailConnectionId } : c)));
+    },
+    [getToken]
+  );
+
   const connection = useMemo(() => accounts.find((a) => a.is_default) ?? accounts[0] ?? null, [accounts]);
 
-  return { accounts, connection, loading, error, connect, disconnect, makeDefault, searchPages, setPage };
+  return {
+    accounts,
+    connection,
+    loading,
+    error,
+    connect,
+    disconnect,
+    makeDefault,
+    setGmailLink,
+    searchPages,
+    setPage,
+  };
 }

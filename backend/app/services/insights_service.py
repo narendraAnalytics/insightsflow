@@ -163,13 +163,20 @@ async def load_sheet_context(
         sources = [
             await data_source_service.get_source(session, clerk_user_id, i) for i in sheet_ids
         ]
-        connection = await connection_service.get_connection(session, clerk_user_id)
-        access_token = await connection_service.get_valid_access_token(session, connection)
+        # One token per Google login: a chat may use sheets from several of them.
+        access_tokens: dict[uuid.UUID, str] = {}
+        for connection_id in dict.fromkeys(src.connection_id for src in sources):
+            connection = await connection_service.get_connection(
+                session, clerk_user_id, "google_sheets", connection_id
+            )
+            access_tokens[connection_id] = await connection_service.get_valid_access_token(
+                session, connection
+            )
         previews = await asyncio.gather(
             *(
                 asyncio.to_thread(
                     google_sheets.fetch_sheet_preview,
-                    access_token,
+                    access_tokens[src.connection_id],
                     src.external_id,
                     src.tab_title or None,
                     MAX_SHEET_ROWS,
@@ -194,24 +201,28 @@ async def load_sheet_context(
         truncated=truncated,
         gmail_token=gmail_token,
         gmail_can_send=can_send,
-        slack_channel=await _slack_channel(session, clerk_user_id),
-        notion_page=await _notion_page(session, clerk_user_id),
+        slack_channel=await _slack_channel(session, clerk_user_id, gmail_connection_id),
+        notion_page=await _notion_page(session, clerk_user_id, gmail_connection_id),
     )
 
 
-async def _notion_page(session: AsyncSession, clerk_user_id: str) -> dict[str, str] | None:
+async def _notion_page(
+    session: AsyncSession, clerk_user_id: str, gmail_connection_id: uuid.UUID | None = None
+) -> dict[str, str] | None:
     """Never blocks Q&A: any failure just means the Notion tool isn't offered."""
     try:
-        return await notion_service.default_page(session, clerk_user_id)
+        return await notion_service.default_page(session, clerk_user_id, gmail_connection_id)
     except Exception:
         logger.warning("notion_page_unavailable", exc_info=True)
         return None
 
 
-async def _slack_channel(session: AsyncSession, clerk_user_id: str) -> dict[str, str] | None:
+async def _slack_channel(
+    session: AsyncSession, clerk_user_id: str, gmail_connection_id: uuid.UUID | None = None
+) -> dict[str, str] | None:
     """Never blocks Q&A: any failure just means the Slack tool isn't offered."""
     try:
-        return await slack_service.default_channel(session, clerk_user_id)
+        return await slack_service.default_channel(session, clerk_user_id, gmail_connection_id)
     except Exception:
         logger.warning("slack_channel_unavailable", exc_info=True)
         return None

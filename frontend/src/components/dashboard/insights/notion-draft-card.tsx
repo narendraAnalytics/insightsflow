@@ -11,6 +11,7 @@ import {
   WarningCircle,
 } from "@phosphor-icons/react";
 import type { NotionDraft, NotionTarget } from "@/hooks/use-insights-chat";
+import { forGmail } from "@/lib/gmail-link";
 import { useNotionConnection } from "@/hooks/use-notion-connection";
 
 const zeyada = "font-(family-name:--font-zeyada) font-normal";
@@ -31,15 +32,18 @@ function savedWhen(iso?: string): string {
 export function NotionDraftCard({
   draft,
   onSave,
+  gmailId,
 }: {
   draft: NotionDraft;
+  /** The chat's Gmail account: only its workspaces are offered. */
+  gmailId?: string | null;
   onSave: (title: string, body: string, target?: NotionTarget) => Promise<void>;
 }) {
   const reduce = useReducedMotion();
   const uid = useId();
   // With several workspaces the user picks where it goes; each saves under its own chosen page.
   const { accounts } = useNotionConnection();
-  const targets = accounts.filter((a) => a.status === "connected" && a.notion_page_id);
+  const targets = forGmail(accounts, gmailId).filter((a) => a.status === "connected" && a.notion_page_id);
   const [targetId, setTargetId] = useState<string | null>(null);
   const chosen =
     targets.find((a) => a.id === targetId) ??
@@ -70,7 +74,7 @@ export function NotionDraftCard({
     setError(null);
     setBusy(true);
     try {
-      if (multi) {
+      if (chosen) {
         await onSave(title.trim(), body.trim(), {
           id: chosen.id,
           workspace: chosen.external_account_email ?? "",

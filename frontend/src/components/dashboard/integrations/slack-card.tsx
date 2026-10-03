@@ -6,6 +6,9 @@ import { Hash, LinkSimple, Plus, Star, XCircle } from "@phosphor-icons/react";
 import { SlackGlyph } from "@/components/site/brand-icons";
 import { useCredits } from "@/components/billing/credits-provider";
 import { useSlackConnection, type SlackChannel, type SlackConnection } from "@/hooks/use-slack-connection";
+import { useGmailConnection } from "@/hooks/use-gmail-connection";
+import { type GmailConnection } from "@/hooks/use-gmail-connection";
+import { GmailLinkSelect } from "@/components/dashboard/integrations/gmail-link-select";
 import { GlassSlab, StatusPill } from "@/components/dashboard/integrations/google-sheets-card";
 
 const zeyada = "font-(family-name:--font-zeyada) font-normal";
@@ -49,12 +52,16 @@ function WorkspaceRow({
   loadChannels,
   setChannel,
   sendTest,
+  gmailAccounts,
+  onLinkGmail,
   onReconnect,
   onMakeDefault,
   onDisconnect,
   run,
 }: {
   account: SlackConnection;
+  gmailAccounts: GmailConnection[];
+  onLinkGmail: (gmailId: string | null) => void;
   several: boolean;
   busy: boolean;
   loadChannels: (id: string) => Promise<SlackChannel[]>;
@@ -116,6 +123,13 @@ function WorkspaceRow({
           </span>
         )}
       </div>
+
+      <GmailLinkSelect
+        accounts={gmailAccounts}
+        value={account.gmail_connection_id}
+        onChange={onLinkGmail}
+        disabled={busy}
+      />
 
       {showPicker ? (
         <div className="flex flex-col gap-2">
@@ -240,8 +254,22 @@ function WorkspaceRow({
 }
 
 export function SlackCard() {
-  const { accounts, loading, error, connect, disconnect, makeDefault, loadChannels, setChannel, sendTest } =
-    useSlackConnection();
+  const {
+    accounts,
+    loading,
+    error,
+    connect,
+    disconnect,
+    makeDefault,
+    setGmailLink,
+    loadChannels,
+    setChannel,
+    sendTest,
+  } = useSlackConnection();
+  const { accounts: gmailAccounts } = useGmailConnection();
+  // Which Gmail a NEW workspace will belong to; defaults to the default Gmail account.
+  const [newGmailId, setNewGmailId] = useState<string | null | undefined>(undefined);
+  const gmailForNew = newGmailId === undefined ? (gmailAccounts.find((g) => g.is_default)?.id ?? null) : newGmailId;
   const { connectCost } = useCredits();
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -293,10 +321,16 @@ export function SlackCard() {
             it never reads your messages.
           </p>
           <ConnectGuide cost={connectCost} />
+          <GmailLinkSelect
+            accounts={gmailAccounts}
+            value={gmailForNew}
+            onChange={setNewGmailId}
+            label="This workspace belongs to"
+          />
           <div>
             <button
               type="button"
-              onClick={() => void run(() => connect())}
+              onClick={() => void run(() => connect({ gmailConnectionId: gmailForNew }))}
               disabled={busy}
               className={`bg-gradient-flow inline-flex items-center gap-2 rounded-full px-6 py-2.5 ${zeyada} text-[24px] leading-none text-(--flow-cream) shadow-[0_18px_30px_-14px_var(--flow-magenta)] transition-transform hover:scale-[1.04] active:scale-[0.97] disabled:opacity-60`}
             >
@@ -317,6 +351,8 @@ export function SlackCard() {
                 loadChannels={loadChannels}
                 setChannel={setChannel}
                 sendTest={sendTest}
+                gmailAccounts={gmailAccounts}
+                onLinkGmail={(gmailId) => void run(() => setGmailLink(account.id, gmailId))}
                 run={run}
                 onReconnect={() => void run(() => connect({ reconnect: true }))}
                 onMakeDefault={() => void run(() => makeDefault(account.id))}
@@ -340,10 +376,16 @@ export function SlackCard() {
             </a>{" "}
             with the email you want to use, then come back and click Connect another workspace.
           </p>
+          <GmailLinkSelect
+            accounts={gmailAccounts}
+            value={gmailForNew}
+            onChange={setNewGmailId}
+            label="New workspace belongs to"
+          />
           <div>
             <button
               type="button"
-              onClick={() => void run(() => connect())}
+              onClick={() => void run(() => connect({ gmailConnectionId: gmailForNew }))}
               disabled={busy}
               className="inline-flex items-center gap-1.5 rounded-full bg-(--flow-cream) px-5 py-2 font-(family-name:--font-zeyada) text-[22px] leading-none font-normal text-(--flow-magenta) shadow-[0_14px_24px_-14px_var(--flow-magenta)] transition-transform hover:scale-[1.04] active:scale-[0.97] disabled:opacity-60"
             >

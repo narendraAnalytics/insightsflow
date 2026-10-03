@@ -302,14 +302,19 @@ function AppsPanel({ apps }: { apps: AppRow[] }) {
 }
 
 export function ProjectsGrid() {
-  const { connection, loading, connect: connectSheets } = useGoogleSheetsConnection();
+  const {
+    accounts: sheetsAccounts,
+    connection,
+    sources,
+    loading,
+    connect: connectSheets,
+  } = useGoogleSheetsConnection();
   const { accounts: gmailAccounts, connection: gmailConnection, connect: connectGmail } = useGmailConnection();
   const gmailConnected = gmailConnection?.status === "connected";
   const { accounts: slackAccounts, connection: slackConnection, connect: connectSlack } = useSlackConnection();
   const slackConnected = slackConnection?.status === "connected";
   const { accounts: notionAccounts, connection: notionConnection, connect: connectNotion } = useNotionConnection();
   const notionConnected = notionConnection?.status === "connected";
-  const sources = connection?.sources ?? [];
   const projects = groupProjects(sources);
   const linkedApps = [
     gmailConnected && { name: "Gmail", Glyph: GmailGlyph },
@@ -327,10 +332,12 @@ export function ProjectsGrid() {
       detail: [
         connection?.external_account_email,
         sources.length > 0 ? `${sources.length} tab${sources.length === 1 ? "" : "s"}` : null,
+        sheetsAccounts.length > 1 && `+${sheetsAccounts.length - 1} more`,
       ]
         .filter(Boolean)
         .join(" · "),
-      connect: connectSheets,
+      connect: () => connectSheets(),
+      addAnother: () => connectSheets(),
     },
     {
       key: "gmail",

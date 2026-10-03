@@ -52,9 +52,12 @@ async def get_source(session: AsyncSession, clerk_user_id: str, source_id: uuid.
 
 
 async def _connection_and_token(
-    session: AsyncSession, clerk_user_id: str
+    session: AsyncSession, clerk_user_id: str, connection_id: uuid.UUID | None = None
 ) -> tuple[Connection, str]:
-    connection = await connection_service.get_connection(session, clerk_user_id)
+    """The Google login with `connection_id`, else the user's default one."""
+    connection = await connection_service.get_connection(
+        session, clerk_user_id, "google_sheets", connection_id
+    )
     token = await connection_service.get_valid_access_token(session, connection)
     return connection, token
 
@@ -69,11 +72,14 @@ def _apply_metadata(source: DataSource, meta: google_sheets.SheetMetadata) -> No
 
 
 async def list_tabs(
-    session: AsyncSession, clerk_user_id: str, spreadsheet_id: str
+    session: AsyncSession,
+    clerk_user_id: str,
+    spreadsheet_id: str,
+    connection_id: uuid.UUID | None = None,
 ) -> google_sheets.SpreadsheetInfo:
     """Tabs of a spreadsheet the user already granted — lets them add another
     tab without going through the Picker again."""
-    _, token = await _connection_and_token(session, clerk_user_id)
+    _, token = await _connection_and_token(session, clerk_user_id, connection_id)
     return await asyncio.to_thread(google_sheets.get_spreadsheet_info, token, spreadsheet_id)
 
 
@@ -82,10 +88,12 @@ async def add_source(
     clerk_user_id: str,
     spreadsheet_id: str,
     tab_title: str | None,
+    connection_id: uuid.UUID | None = None,
 ) -> DataSource:
-    """Adds a spreadsheet tab (first tab when `tab_title` is None). Idempotent:
-    adding the same tab twice returns the existing source, refreshed."""
-    connection, token = await _connection_and_token(session, clerk_user_id)
+    """Adds a spreadsheet tab (first tab when `tab_title` is None) under one Google login
+    (the default when `connection_id` is None). Idempotent: adding the same tab twice
+    returns the existing source, refreshed."""
+    connection, token = await _connection_and_token(session, clerk_user_id, connection_id)
     meta = await asyncio.to_thread(
         google_sheets.fetch_sheet_metadata, token, spreadsheet_id, tab_title
     )
@@ -156,10 +164,18 @@ async def refresh_stale_sources(session: AsyncSession, clerk_user_id: str) -> li
     if not stale:
         return sources
 
-    try:
-        _, token = await _connection_and_token(session, clerk_user_id)
-    except (NotFoundError, connection_service.ConnectionExpired):
-        # Expired access is flagged on the connection (status "expired"); the page still loads.
+    # Each source is read with ITS Google login's token. A login that is expired is flagged on
+    # the connection (status "expired"); its sources keep their cached values and the page loads.
+    tokens: dict[uuid.UUID, str] = {}
+    for connection_id in {s.connection_id for s in stale}:
+        try:
+            _, tokens[connection_id] = await _connection_and_token(
+                session, clerk_user_id, connection_id
+            )
+        except (NotFoundError, connection_service.ConnectionExpired):
+            continue
+    stale = [s for s in stale if s.connection_id in tokens]
+    if not stale:
         return sources
 
     gate = asyncio.Semaphore(_REFRESH_CONCURRENCY)
@@ -169,7 +185,7 @@ async def refresh_stale_sources(session: AsyncSession, clerk_user_id: str) -> li
             try:
                 return await asyncio.to_thread(
                     google_sheets.fetch_sheet_metadata,
-                    token,
+                    tokens[source.connection_id],
                     source.external_id,
                     source.tab_title or None,
                 )
@@ -192,7 +208,7 @@ async def preview(
     session: AsyncSession, clerk_user_id: str, source_id: uuid.UUID, max_rows: int = 25
 ) -> google_sheets.SheetPreview:
     source = await get_source(session, clerk_user_id, source_id)
-    _, token = await _connection_and_token(session, clerk_user_id)
+    _, token = await _connection_and_token(session, clerk_user_id, source.connection_id)
     return await asyncio.to_thread(
         google_sheets.fetch_sheet_preview,
         token,

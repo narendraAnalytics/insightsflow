@@ -23,6 +23,7 @@ import { useGmailConnection, type GmailConnection } from "@/hooks/use-gmail-conn
 import { documentAsSource, useDocuments } from "@/hooks/use-documents";
 import { useNotionConnection, type NotionConnection } from "@/hooks/use-notion-connection";
 import { useSlackConnection, type SlackConnection } from "@/hooks/use-slack-connection";
+import { forGmail, forGmailOrAll } from "@/lib/gmail-link";
 import { sourceLabel, useGoogleSheetsConnection, type DataSource } from "@/hooks/use-google-sheets-connection";
 import {
   isEmailDraft,
@@ -157,9 +158,12 @@ function AssistantMessage({
   message,
   draftActions,
   gmailAccount,
+  gmailId,
 }: {
   message: ChatMessage;
   draftActions: DraftActions;
+  /** The Gmail account this chat works as; Slack/Notion drafts only offer its workspaces. */
+  gmailId?: string | null;
   /** Which Gmail the chat reads, shown on the emails card when the user has several. */
   gmailAccount?: string | null;
 }) {
@@ -198,12 +202,14 @@ function AssistantMessage({
             <NotionDraftCard
               key={s.id}
               draft={s.draft}
+              gmailId={gmailId}
               onSave={(title, body, target) => draftActions.saveNotion(s.id, title, body, target)}
             />
           ) : s.draft && isSlackDraft(s.draft) ? (
             <SlackDraftCard
               key={s.id}
               draft={s.draft}
+              gmailId={gmailId}
               onPost={(channelId, text, target) => draftActions.postSlack(s.id, channelId, text, target)}
             />
           ) : s.draft ? (
@@ -595,17 +601,17 @@ export function InsightsChat() {
   const reduce = useReducedMotion();
   const { accounts: slackAccounts } = useSlackConnection();
   const { accounts: notionAccounts } = useNotionConnection();
-  const { connection, loading } = useGoogleSheetsConnection();
+  const { accounts: sheetsAccounts, sources: sheetSources, loading } = useGoogleSheetsConnection();
   const { accounts: gmailAccounts, loading: gmailLoading } = useGmailConnection();
   const { documents, loading: documentsLoading } = useDocuments();
   // Ready documents are offered next to sheet tabs: same chips, same chat sources (the
   // backend resolves each id to a sheet tab or a document).
   const sources = useMemo(
     () => [
-      ...(connection?.sources ?? []),
+      ...sheetSources,
       ...documents.filter((d) => d.status === "ready").map(documentAsSource),
     ],
-    [connection, documents]
+    [sheetSources, documents]
   );
   // Accounts the agent can read mail from (connected, with the read permission).
   const readableGmail = useMemo(
@@ -650,6 +656,21 @@ export function InsightsChat() {
     gmailAccounts.find((a) => a.is_default) ??
     gmailAccounts[0];
   const gmailAccountLabel = gmailAccounts.length > 1 ? (chatGmail?.external_account_email ?? null) : null;
+
+  // A NEW chat offers the sheets of the chosen Gmail's Google login (documents are always
+  // offered). If that Gmail owns no login, every sheet stays available. A saved chat keeps its own.
+  const pickerSources = useMemo(() => {
+    const logins = new Set(forGmailOrAll(sheetsAccounts, chatGmail?.id).map((a) => a.id));
+    return sources.filter((s) => !s.connection_id || logins.has(s.connection_id));
+  }, [sources, sheetsAccounts, chatGmail?.id]);
+
+  // Switching Gmail on a new chat drops any selected sheet that is no longer offered.
+  useEffect(() => {
+    if (conversationId !== null) return;
+    const offered = new Set(pickerSources.map((s) => s.id));
+    const kept = sourceIds.filter((id) => offered.has(id));
+    if (kept.length !== sourceIds.length) setSourceIds(kept);
+  }, [conversationId, pickerSources, sourceIds, setSourceIds]);
   const [historyOpen, setHistoryOpen] = useState(false);
 
   const [draft, setDraft] = useState("");
@@ -754,7 +775,7 @@ export function InsightsChat() {
 
       <div className="mx-auto flex min-h-[calc(100dvh-9rem)] w-full max-w-3xl min-w-0 flex-col">
       <SourcePicker
-        sources={sources}
+        sources={conversationId !== null ? sources : pickerSources}
         selected={sourceIds}
         gmailReady={gmailReady}
         gmailOn={useGmail}
@@ -769,8 +790,8 @@ export function InsightsChat() {
         onChange={setSourceIds}
       />
       <div className="-mt-3 mb-5 flex flex-wrap items-center gap-2 self-start">
-        <SlackStatus accounts={slackAccounts} />
-        <NotionStatus accounts={notionAccounts} />
+        <SlackStatus accounts={forGmail(slackAccounts, chatGmail?.id)} />
+        <NotionStatus accounts={forGmail(notionAccounts, chatGmail?.id)} />
       </div>
       {sourceRemoved && (
         <p
@@ -834,7 +855,7 @@ export function InsightsChat() {
         ) : (
           <>
             {messages.map((m) =>
-              m.role === "user" ? <UserMessage key={m.id} message={m} /> : <AssistantMessage key={m.id} message={m} draftActions={draftActions} gmailAccount={gmailAccountLabel} />
+              m.role === "user" ? <UserMessage key={m.id} message={m} /> : <AssistantMessage key={m.id} message={m} draftActions={draftActions} gmailAccount={gmailAccountLabel} gmailId={chatGmail?.id ?? null} />
             )}
           </>
         )}

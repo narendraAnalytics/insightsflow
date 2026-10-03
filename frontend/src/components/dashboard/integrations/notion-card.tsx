@@ -6,6 +6,9 @@ import { FileText, LinkSimple, Plus, Star, XCircle } from "@phosphor-icons/react
 import { NotionGlyph } from "@/components/site/brand-icons";
 import { useCredits } from "@/components/billing/credits-provider";
 import { useNotionConnection, type NotionConnection, type NotionPage } from "@/hooks/use-notion-connection";
+import { useGmailConnection } from "@/hooks/use-gmail-connection";
+import { type GmailConnection } from "@/hooks/use-gmail-connection";
+import { GmailLinkSelect } from "@/components/dashboard/integrations/gmail-link-select";
 import { GlassSlab, StatusPill } from "@/components/dashboard/integrations/google-sheets-card";
 
 const zeyada = "font-(family-name:--font-zeyada) font-normal";
@@ -38,12 +41,16 @@ function WorkspaceRow({
   busy,
   searchPages,
   setPage,
+  gmailAccounts,
+  onLinkGmail,
   onReconnect,
   onMakeDefault,
   onDisconnect,
   run,
 }: {
   account: NotionConnection;
+  gmailAccounts: GmailConnection[];
+  onLinkGmail: (gmailId: string | null) => void;
   several: boolean;
   busy: boolean;
   searchPages: (id: string, query: string) => Promise<NotionPage[]>;
@@ -113,6 +120,13 @@ function WorkspaceRow({
           </span>
         )}
       </div>
+
+      <GmailLinkSelect
+        accounts={gmailAccounts}
+        value={account.gmail_connection_id}
+        onChange={onLinkGmail}
+        disabled={busy}
+      />
 
       {showPicker ? (
         <div className="flex flex-col gap-2">
@@ -225,7 +239,12 @@ function WorkspaceRow({
 }
 
 export function NotionCard() {
-  const { accounts, loading, error, connect, disconnect, makeDefault, searchPages, setPage } = useNotionConnection();
+  const { accounts, loading, error, connect, disconnect, makeDefault, setGmailLink, searchPages, setPage } =
+    useNotionConnection();
+  const { accounts: gmailAccounts } = useGmailConnection();
+  // Which Gmail a NEW workspace will belong to; defaults to the default Gmail account.
+  const [newGmailId, setNewGmailId] = useState<string | null | undefined>(undefined);
+  const gmailForNew = newGmailId === undefined ? (gmailAccounts.find((g) => g.is_default)?.id ?? null) : newGmailId;
   const { connectCost } = useCredits();
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -277,10 +296,16 @@ export function NotionCard() {
             nothing is saved until you review it and click Save.
           </p>
           <ConnectGuide cost={connectCost} />
+          <GmailLinkSelect
+            accounts={gmailAccounts}
+            value={gmailForNew}
+            onChange={setNewGmailId}
+            label="This workspace belongs to"
+          />
           <div>
             <button
               type="button"
-              onClick={() => void run(() => connect())}
+              onClick={() => void run(() => connect({ gmailConnectionId: gmailForNew }))}
               disabled={busy}
               className={`bg-gradient-flow inline-flex items-center gap-2 rounded-full px-6 py-2.5 ${zeyada} text-[24px] leading-none text-(--flow-cream) shadow-[0_18px_30px_-14px_var(--flow-magenta)] transition-transform hover:scale-[1.04] active:scale-[0.97] disabled:opacity-60`}
             >
@@ -300,6 +325,8 @@ export function NotionCard() {
                 busy={busy}
                 searchPages={searchPages}
                 setPage={setPage}
+                gmailAccounts={gmailAccounts}
+                onLinkGmail={(gmailId) => void run(() => setGmailLink(account.id, gmailId))}
                 run={run}
                 onReconnect={() => void run(() => connect({ reconnect: true }))}
                 onMakeDefault={() => void run(() => makeDefault(account.id))}
@@ -317,10 +344,16 @@ export function NotionCard() {
             sign out of Notion first (notion.so → your name → Log out), or open InsightFlow in a private window, then
             click Connect another workspace.
           </p>
+          <GmailLinkSelect
+            accounts={gmailAccounts}
+            value={gmailForNew}
+            onChange={setNewGmailId}
+            label="New workspace belongs to"
+          />
           <div>
             <button
               type="button"
-              onClick={() => void run(() => connect())}
+              onClick={() => void run(() => connect({ gmailConnectionId: gmailForNew }))}
               disabled={busy}
               className="inline-flex items-center gap-1.5 rounded-full bg-(--flow-cream) px-5 py-2 font-(family-name:--font-zeyada) text-[22px] leading-none font-normal text-(--flow-magenta) shadow-[0_14px_24px_-14px_var(--flow-magenta)] transition-transform hover:scale-[1.04] active:scale-[0.97] disabled:opacity-60"
             >

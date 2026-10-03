@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowCounterClockwise, CheckCircle, Hash, PaperPlaneTilt, WarningCircle } from "@phosphor-icons/react";
 import type { SlackDraft, SlackTarget } from "@/hooks/use-insights-chat";
+import { forGmail } from "@/lib/gmail-link";
 import { useSlackConnection } from "@/hooks/use-slack-connection";
 
 const zeyada = "font-(family-name:--font-zeyada) font-normal";
@@ -24,15 +25,18 @@ function postedWhen(iso?: string): string {
 export function SlackDraftCard({
   draft,
   onPost,
+  gmailId,
 }: {
   draft: SlackDraft;
+  /** The chat's Gmail account: only its workspaces are offered. */
+  gmailId?: string | null;
   onPost: (channelId: string, text: string, target?: SlackTarget) => Promise<void>;
 }) {
   const reduce = useReducedMotion();
   const uid = useId();
   // With several workspaces the user picks where it goes; each posts to its own default channel.
   const { accounts } = useSlackConnection();
-  const targets = accounts.filter((a) => a.status === "connected" && a.slack_channel_id);
+  const targets = forGmail(accounts, gmailId).filter((a) => a.status === "connected" && a.slack_channel_id);
   const [targetId, setTargetId] = useState<string | null>(null);
   const chosen =
     targets.find((a) => a.id === targetId) ??
@@ -62,7 +66,8 @@ export function SlackDraftCard({
     setError(null);
     setBusy(true);
     try {
-      if (multi && chosen.slack_channel_id) {
+      // Always name the workspace when we know it, so the post never lands in another Gmail's one.
+      if (chosen?.slack_channel_id) {
         await onPost(chosen.slack_channel_id, text.trim(), {
           id: chosen.id,
           workspace: chosen.external_account_email ?? "",

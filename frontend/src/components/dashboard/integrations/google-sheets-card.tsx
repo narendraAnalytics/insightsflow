@@ -2,14 +2,18 @@
 
 import { useCallback, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Eye, LinkSimple, Plus, Stack, Trash, XCircle } from "@phosphor-icons/react";
+import { useSearchParams } from "next/navigation";
+import { Eye, LinkSimple, Plus, Stack, Star, Trash, XCircle } from "@phosphor-icons/react";
 import { GoogleSheetsGlyph } from "@/components/site/brand-icons";
 import {
   sourceLabel,
   useGoogleSheetsConnection,
   type DataSource,
+  type GoogleSheetsConnection,
   type SpreadsheetTabs,
 } from "@/hooks/use-google-sheets-connection";
+import { useGmailConnection, type GmailConnection } from "@/hooks/use-gmail-connection";
+import { GmailLinkSelect } from "@/components/dashboard/integrations/gmail-link-select";
 import { openGoogleSheetsPicker } from "@/lib/google-picker";
 import { SheetPreviewModal } from "@/components/dashboard/integrations/sheet-preview-modal";
 import { TabPickerDialog } from "@/components/dashboard/integrations/tab-picker-dialog";
@@ -207,14 +211,159 @@ function SourceTile({
 }
 
 type TabDialogState = {
+  /** The Google login the spreadsheet belongs to (so tabs are added under it). */
+  connectionId: string;
   spreadsheetId: string;
   info: SpreadsheetTabs;
   takenTitles: string[];
 };
 
+const zeyada = "font-(family-name:--font-zeyada) font-normal";
+
+/** One Google login: who it is, its tabs, and the actions that belong to it. */
+function LoginSection({
+  account,
+  several,
+  showGmailLink,
+  gmailAccounts,
+  busy,
+  confirmingId,
+  setConfirmingId,
+  onView,
+  onAddTab,
+  onAddSheet,
+  onRemove,
+  onReconnect,
+  onMakeDefault,
+  onDisconnect,
+  onLinkGmail,
+}: {
+  account: GoogleSheetsConnection;
+  several: boolean;
+  showGmailLink: boolean;
+  gmailAccounts: GmailConnection[];
+  busy: boolean;
+  confirmingId: string | null;
+  setConfirmingId: (id: string | null) => void;
+  onView: (source: DataSource) => void;
+  onAddTab: (account: GoogleSheetsConnection, spreadsheetId: string) => void;
+  onAddSheet: (account: GoogleSheetsConnection) => void;
+  onRemove: (id: string) => void;
+  onReconnect: () => void;
+  onMakeDefault: () => void;
+  onDisconnect: () => void;
+  onLinkGmail: (gmailId: string | null) => void;
+}) {
+  const live = account.status === "connected";
+  const sources = account.sources;
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className={`${zeyada} text-[22px] leading-none text-(--flow-ink)/80`}>
+          Signed in as <span className="text-(--flow-magenta)">{account.external_account_email}</span>
+        </p>
+        {account.is_default && several && (
+          <span
+            className={`inline-flex items-center gap-1 rounded-full bg-(--flow-magenta)/15 px-2.5 py-0.5 ${zeyada} text-[18px] leading-none text-(--flow-magenta)`}
+          >
+            <Star weight="fill" className="size-3" />
+            Default
+          </span>
+        )}
+        {!live && (
+          <span
+            className={`rounded-full bg-(--flow-coral)/15 px-2.5 py-0.5 ${zeyada} text-[18px] leading-none text-(--flow-coral)`}
+          >
+            Not connected
+          </span>
+        )}
+      </div>
+
+      {showGmailLink && (
+        <GmailLinkSelect
+          accounts={gmailAccounts}
+          value={account.gmail_connection_id}
+          onChange={onLinkGmail}
+          disabled={busy}
+        />
+      )}
+
+      {live && sources.length > 0 && (
+        <ul className="flex flex-col gap-3">
+          <AnimatePresence initial={false}>
+            {sources.map((source, i) => (
+              <SourceTile
+                key={source.id}
+                source={source}
+                accent={tabAccents[i % tabAccents.length]}
+                busy={busy}
+                confirming={confirmingId === source.id}
+                onView={() => onView(source)}
+                onAddTab={() => onAddTab(account, source.spreadsheet_id)}
+                onAskRemove={() => setConfirmingId(source.id)}
+                onCancelRemove={() => setConfirmingId(null)}
+                onConfirmRemove={() => onRemove(source.id)}
+              />
+            ))}
+          </AnimatePresence>
+        </ul>
+      )}
+
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+        {live ? (
+          <button
+            type="button"
+            onClick={() => onAddSheet(account)}
+            disabled={busy}
+            className={
+              sources.length === 0
+                ? "bg-gradient-flow inline-flex items-center gap-2 rounded-full px-6 py-2.5 font-(family-name:--font-zeyada) text-[24px] leading-none font-normal text-(--flow-cream) shadow-[0_18px_30px_-14px_var(--flow-magenta)] transition-transform hover:scale-[1.04] active:scale-[0.97] disabled:opacity-60"
+                : "inline-flex items-center gap-2 rounded-full bg-(--flow-cream) px-5 py-2 font-(family-name:--font-zeyada) text-[23px] leading-none font-normal text-(--flow-magenta) shadow-[0_14px_24px_-14px_var(--flow-magenta)] transition-transform hover:scale-[1.04] active:scale-[0.97] disabled:opacity-60"
+            }
+          >
+            <Plus weight="bold" className="size-4" />
+            {sources.length === 0 ? "Select spreadsheet" : "Add another sheet"}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onReconnect}
+            disabled={busy}
+            className="bg-gradient-flow inline-flex items-center gap-2 rounded-full px-6 py-2.5 font-(family-name:--font-zeyada) text-[24px] leading-none font-normal text-(--flow-cream) shadow-[0_18px_30px_-14px_var(--flow-magenta)] transition-transform hover:scale-[1.04] active:scale-[0.97] disabled:opacity-60"
+          >
+            <LinkSimple weight="bold" className="size-4" />
+            Reconnect Google Sheets
+          </button>
+        )}
+
+        {several && !account.is_default && live && (
+          <button
+            type="button"
+            onClick={onMakeDefault}
+            disabled={busy}
+            className={`${zeyada} text-[21px] leading-none text-(--flow-ink)/70 hover:text-(--flow-magenta) disabled:opacity-60`}
+          >
+            Make default
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={onDisconnect}
+          disabled={busy}
+          className="inline-flex items-center gap-1.5 font-(family-name:--font-zeyada) text-[21px] leading-none font-normal text-(--flow-ink)/65 transition-colors hover:text-(--flow-coral) disabled:opacity-60"
+        >
+          <XCircle weight="bold" className="size-3.5" />
+          Disconnect
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function GoogleSheetsCard() {
   const {
-    connection,
+    accounts,
     loading,
     error,
     connect,
@@ -224,15 +373,21 @@ export function GoogleSheetsCard() {
     removeSource,
     getSourcePreview,
     disconnect,
+    makeDefault,
+    setGmailLink,
   } = useGoogleSheetsConnection();
+  const { accounts: gmailAccounts } = useGmailConnection();
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [previewSource, setPreviewSource] = useState<DataSource | null>(null);
   const [tabDialog, setTabDialog] = useState<TabDialogState | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const flag = useSearchParams().get("sheets_error");
 
-  const isConnected = connection?.status === "connected";
-  const sources = connection?.sources ?? [];
+  const isConnected = accounts.some((a) => a.status === "connected");
+  const several = accounts.length > 1;
+  // The Gmail dropdown only appears when there is something to choose between.
+  const showGmailLink = several || gmailAccounts.length > 1;
 
   // Stable per source so the preview modal's fetch effect doesn't re-run each render.
   const previewSourceId = previewSource?.id ?? null;
@@ -254,23 +409,35 @@ export function GoogleSheetsCard() {
     }
   };
 
-  const openTabsFor = async (spreadsheetId: string) => {
-    const info = await getTabs(spreadsheetId);
-    const takenTitles = sources.filter((s) => s.spreadsheet_id === spreadsheetId).map((s) => s.tab_title);
-    setTabDialog({ spreadsheetId, info, takenTitles });
+  const takenFor = (account: GoogleSheetsConnection, spreadsheetId: string) =>
+    account.sources.filter((s) => s.spreadsheet_id === spreadsheetId).map((s) => s.tab_title);
+
+  const openTabsFor = async (account: GoogleSheetsConnection, spreadsheetId: string) => {
+    const info = await getTabs(spreadsheetId, account.id);
+    setTabDialog({
+      connectionId: account.id,
+      spreadsheetId,
+      info,
+      takenTitles: takenFor(account, spreadsheetId),
+    });
   };
 
-  const handleAddSheet = () =>
+  const handleAddSheet = (account: GoogleSheetsConnection) =>
     run(async () => {
-      const { access_token, app_id } = await getPickerToken();
+      // The Picker runs with THIS login's token, so it browses and grants that Google account's files.
+      const { access_token, app_id } = await getPickerToken(account.id);
       await openGoogleSheetsPicker(access_token, app_id, (file) => {
         void run(async () => {
-          const info = await getTabs(file.id);
+          const info = await getTabs(file.id, account.id);
           if (info.tabs.length > 1) {
-            const takenTitles = sources.filter((s) => s.spreadsheet_id === file.id).map((s) => s.tab_title);
-            setTabDialog({ spreadsheetId: file.id, info, takenTitles });
+            setTabDialog({
+              connectionId: account.id,
+              spreadsheetId: file.id,
+              info,
+              takenTitles: takenFor(account, file.id),
+            });
           } else {
-            await addSource(file.id, info.tabs[0]?.title);
+            await addSource(file.id, info.tabs[0]?.title, account.id);
           }
         });
       });
@@ -280,7 +447,7 @@ export function GoogleSheetsCard() {
     run(async () => {
       if (!tabDialog) return;
       for (const title of titles) {
-        await addSource(tabDialog.spreadsheetId, title);
+        await addSource(tabDialog.spreadsheetId, title, tabDialog.connectionId);
       }
       setTabDialog(null);
     });
@@ -319,11 +486,11 @@ export function GoogleSheetsCard() {
 
         {loading ? (
           <p className="font-(family-name:--font-zeyada) text-[22px] leading-none text-(--flow-ink)/70">Checking connection…</p>
-        ) : !isConnected ? (
+        ) : accounts.length === 0 ? (
           <div>
             <button
               type="button"
-              onClick={() => void run(connect)}
+              onClick={() => void run(() => connect())}
               disabled={busy}
               className="bg-gradient-flow inline-flex items-center gap-2 rounded-full px-6 py-2.5 font-(family-name:--font-zeyada) text-[24px] leading-none font-normal text-(--flow-cream) shadow-[0_18px_30px_-14px_var(--flow-magenta)] transition-transform hover:scale-[1.04] active:scale-[0.97] disabled:opacity-60"
             >
@@ -332,64 +499,50 @@ export function GoogleSheetsCard() {
             </button>
           </div>
         ) : (
-          <div className="flex flex-col gap-4">
-            <p className="font-(family-name:--font-zeyada) text-[22px] leading-none font-normal text-(--flow-ink)/80">
-              Signed in as{" "}
-              <span className="text-(--flow-magenta)">{connection?.external_account_email}</span>
-            </p>
+          <div className="flex flex-col gap-6">
+            {accounts.map((account) => (
+              <LoginSection
+                key={account.id}
+                account={account}
+                several={several}
+                showGmailLink={showGmailLink}
+                gmailAccounts={gmailAccounts}
+                busy={busy}
+                confirmingId={confirmingId}
+                setConfirmingId={setConfirmingId}
+                onView={setPreviewSource}
+                onAddTab={(a, spreadsheetId) => void run(() => openTabsFor(a, spreadsheetId))}
+                onAddSheet={(a) => void handleAddSheet(a)}
+                onRemove={(id) => void handleRemove(id)}
+                onReconnect={() => void run(() => connect({ reconnect: true }))}
+                onMakeDefault={() => void run(() => makeDefault(account.id))}
+                onDisconnect={() => void run(() => disconnect(account.id))}
+                onLinkGmail={(gmailId) => void run(() => setGmailLink(account.id, gmailId))}
+              />
+            ))}
 
-            {sources.length > 0 && (
-              <ul className="flex flex-col gap-3">
-                <AnimatePresence initial={false}>
-                  {sources.map((source, i) => (
-                    <SourceTile
-                      key={source.id}
-                      source={source}
-                      accent={tabAccents[i % tabAccents.length]}
-                      busy={busy}
-                      confirming={confirmingId === source.id}
-                      onView={() => setPreviewSource(source)}
-                      onAddTab={() => void run(() => openTabsFor(source.spreadsheet_id))}
-                      onAskRemove={() => setConfirmingId(source.id)}
-                      onCancelRemove={() => setConfirmingId(null)}
-                      onConfirmRemove={() => void handleRemove(source.id)}
-                    />
-                  ))}
-                </AnimatePresence>
-              </ul>
-            )}
-
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <div className="flex flex-col gap-1.5">
               <button
                 type="button"
-                onClick={() => void handleAddSheet()}
+                onClick={() => void run(() => connect())}
                 disabled={busy}
-                className={
-                  sources.length === 0
-                    ? "bg-gradient-flow inline-flex items-center gap-2 rounded-full px-6 py-2.5 font-(family-name:--font-zeyada) text-[24px] leading-none font-normal text-(--flow-cream) shadow-[0_18px_30px_-14px_var(--flow-magenta)] transition-transform hover:scale-[1.04] active:scale-[0.97] disabled:opacity-60"
-                    : "inline-flex items-center gap-2 rounded-full bg-(--flow-cream) px-5 py-2 font-(family-name:--font-zeyada) text-[23px] leading-none font-normal text-(--flow-magenta) shadow-[0_14px_24px_-14px_var(--flow-magenta)] transition-transform hover:scale-[1.04] active:scale-[0.97] disabled:opacity-60"
-                }
+                className="inline-flex w-fit items-center gap-1.5 rounded-full bg-(--flow-cream) px-5 py-2 font-(family-name:--font-zeyada) text-[22px] leading-none font-normal text-(--flow-magenta) shadow-[0_14px_24px_-14px_var(--flow-magenta)] transition-transform hover:scale-[1.04] active:scale-[0.97] disabled:opacity-60"
               >
                 <Plus weight="bold" className="size-4" />
-                {sources.length === 0 ? "Select spreadsheet" : "Add another sheet"}
+                Connect another Google account
               </button>
-
-              <button
-                type="button"
-                onClick={() => void run(disconnect)}
-                disabled={busy}
-                className="inline-flex items-center gap-1.5 font-(family-name:--font-zeyada) text-[21px] leading-none font-normal text-(--flow-ink)/65 transition-colors hover:text-(--flow-coral) disabled:opacity-60"
-              >
-                <XCircle weight="bold" className="size-3.5" />
-                Disconnect
-              </button>
+              <p className={`${zeyada} text-[19px] leading-snug text-(--flow-ink)/65`}>
+                Free to connect. Google asks you to choose the account; each sheet tab you add costs credits.
+              </p>
             </div>
           </div>
         )}
 
-        {(error || actionError) && (
+        {(error || actionError || flag === "limit") && (
           <p role="alert" className="font-(family-name:--font-zeyada) text-[22px] leading-snug font-normal text-(--flow-coral)">
-            {actionError ?? error}
+            {actionError ??
+              error ??
+              "You've reached the limit of 5 Google accounts for Sheets. Disconnect one first."}
           </p>
         )}
       </GlassSlab>

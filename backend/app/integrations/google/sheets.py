@@ -88,7 +88,7 @@ def build_auth_url(
     scopes: list[str] | None = None,
     redirect_uri: str | None = None,
     include_granted_scopes: bool = True,
-    prompt: str = "consent",
+    prompt: str = "select_account consent",
 ) -> str:
     """Runs synchronously (no network call) — safe to call directly.
     `code_verifier` must be the same value passed to `exchange_code` for

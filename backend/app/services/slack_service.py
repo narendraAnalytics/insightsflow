@@ -8,7 +8,6 @@ anything is posted.
 """
 
 import asyncio
-import secrets
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -43,14 +42,22 @@ class SlackDraftAlreadySent(AppError):
     code = "draft_already_sent"
 
 
-def start_connect(clerk_user_id: str) -> str:
-    """The Slack install URL. Slack has no PKCE, so the state's `cv` slot just carries
-    a random nonce; the HMAC signature + 10-minute expiry are the CSRF protection."""
-    return slack.build_auth_url(sign_state(clerk_user_id, secrets.token_urlsafe(16)))
+def start_connect(clerk_user_id: str, gmail_connection_id: uuid.UUID | None = None) -> str:
+    """The Slack install URL. Slack has no PKCE, so the state's `cv` slot carries a random
+    nonce, or the Gmail account this workspace should belong to; the HMAC signature +
+    10-minute expiry are the CSRF protection."""
+    cv = connection_service.gmail_link_state(gmail_connection_id)
+    return slack.build_auth_url(sign_state(clerk_user_id, cv))
 
 
-async def complete_connect(session: AsyncSession, clerk_user_id: str, code: str) -> Connection:
+async def complete_connect(
+    session: AsyncSession,
+    clerk_user_id: str,
+    code: str,
+    gmail_connection_id: uuid.UUID | None = None,
+) -> Connection:
     user = await connection_service.get_or_create_user(session, clerk_user_id)
+    gmail_link = await connection_service.valid_gmail_link(session, user.id, gmail_connection_id)
     install = await asyncio.to_thread(slack.exchange_code, code)
     token_enc, key_version = encrypt_token(install.bot_token)
 
@@ -79,9 +86,11 @@ async def complete_connect(session: AsyncSession, clerk_user_id: str, code: str)
     previous = connection.config or {}
     config: dict[str, Any] = {"team_id": install.team_id, "team_name": install.team_name}
     # Reconnecting the SAME workspace keeps its chosen channel and default flag.
-    for key in ("channel_id", "channel_name", "default"):
+    for key in ("channel_id", "channel_name", "default", connection_service.GMAIL_LINK_KEY):
         if previous.get(key):
             config[key] = previous[key]
+    if gmail_link:  # a Gmail chosen on this connect wins over the old one
+        config[connection_service.GMAIL_LINK_KEY] = gmail_link
 
     connection.status = "connected"
     connection.external_account_email = install.team_name  # shown as the account label
@@ -160,17 +169,20 @@ async def send_test(
     return {"channel_name": cfg.get("channel_name", "")}
 
 
-async def default_channel(session: AsyncSession, clerk_user_id: str) -> dict[str, str] | None:
-    """{id, name} of the default channel if Slack is connected and one is chosen.
+async def default_channel(
+    session: AsyncSession, clerk_user_id: str, gmail_connection_id: uuid.UUID | None = None
+) -> dict[str, str] | None:
+    """{id, name} of the channel the agent drafts to: the first ready workspace that belongs to
+    the chat's Gmail account (default workspace first), else the default workspace.
     Never raises — it only decides whether the agent may offer `draft_slack_message`."""
-    try:
-        connection = await connection_service.get_connection(session, clerk_user_id, PROVIDER)
-    except NotFoundError:
-        return None
-    cfg = connection.config or {}
-    if connection.status != "connected" or not cfg.get("channel_id"):
-        return None
-    return {"id": cfg["channel_id"], "name": cfg.get("channel_name", "")}
+    user = await connection_service.get_or_create_user(session, clerk_user_id)
+    rows = await connection_service.provider_connections(session, user.id, PROVIDER)
+    gmail_id = await connection_service.effective_gmail_id(session, user.id, gmail_connection_id)
+    for connection in connection_service.for_gmail(rows, gmail_id):
+        cfg = connection.config or {}
+        if connection.status == "connected" and cfg.get("channel_id"):
+            return {"id": cfg["channel_id"], "name": cfg.get("channel_name", "")}
+    return None
 
 
 async def disconnect(

@@ -4,6 +4,7 @@ the first provider; Connection.provider distinguishes others later.
 """
 
 import asyncio
+import secrets
 import uuid
 from datetime import UTC, datetime
 
@@ -28,7 +29,7 @@ class ConnectionExpired(AppError):
 
 
 # Providers that may have several accounts per user (Gmail first, then Slack, Notion).
-MULTI_ACCOUNT_PROVIDERS = ("gmail", "slack", "notion")
+MULTI_ACCOUNT_PROVIDERS = ("gmail", "slack", "notion", "google_sheets")
 
 
 class TooManyAccounts(AppError):
@@ -38,6 +39,79 @@ class TooManyAccounts(AppError):
 
 # Gmail may have several accounts per user; this keeps one user from piling up connections.
 MAX_ACCOUNTS_PER_PROVIDER = 5
+
+
+# Slack/Notion workspaces can belong to one of the user's Gmail accounts (a "profile"):
+# the Gmail connection's id lives in the workspace's `config`, so no migration is needed.
+GMAIL_LINK_KEY = "gmail_connection_id"
+LINKED_PROVIDERS = ("slack", "notion", "google_sheets")
+
+
+def linked_gmail(connection: Connection) -> str | None:
+    return (connection.config or {}).get(GMAIL_LINK_KEY) or None
+
+
+def for_gmail[T: Connection](rows: list[T], gmail_id: uuid.UUID | str | None) -> list[T]:
+    """The workspaces that belong to this Gmail account. When none of the user's workspaces
+    is linked to any Gmail (connected before linking existed), all of them are returned so
+    nothing disappears."""
+    if not any(linked_gmail(c) for c in rows):
+        return rows
+    return [c for c in rows if gmail_id is not None and linked_gmail(c) == str(gmail_id)]
+
+
+async def effective_gmail_id(
+    session: AsyncSession, user_id: uuid.UUID, gmail_connection_id: uuid.UUID | None
+) -> uuid.UUID | None:
+    """The Gmail account a chat works as: the chosen one, else the user's default."""
+    if gmail_connection_id is not None:
+        return gmail_connection_id
+    rows = await provider_connections(session, user_id, "gmail")
+    return rows[0].id if rows else None
+
+
+async def valid_gmail_link(
+    session: AsyncSession, user_id: uuid.UUID, gmail_connection_id: uuid.UUID | None
+) -> str | None:
+    """`gmail_connection_id` as a string if it is one of this user's Gmail accounts."""
+    if gmail_connection_id is None:
+        return None
+    rows = await provider_connections(session, user_id, "gmail")
+    return str(gmail_connection_id) if any(c.id == gmail_connection_id for c in rows) else None
+
+
+def gmail_link_state(gmail_connection_id: uuid.UUID | None) -> str:
+    """What rides in the OAuth state's `cv` slot (a nonce otherwise) to link a new workspace."""
+    return f"gmail:{gmail_connection_id}" if gmail_connection_id else secrets.token_urlsafe(16)
+
+
+def gmail_link_from_state(cv: str) -> uuid.UUID | None:
+    if not cv.startswith("gmail:"):
+        return None
+    try:
+        return uuid.UUID(cv.removeprefix("gmail:"))
+    except ValueError:
+        return None
+
+
+async def set_gmail_link(
+    session: AsyncSession,
+    clerk_user_id: str,
+    provider: str,
+    connection_id: uuid.UUID,
+    gmail_connection_id: uuid.UUID | None,
+) -> None:
+    """Moves a Slack/Notion workspace to another Gmail account, or to none."""
+    user = await get_or_create_user(session, clerk_user_id)
+    link = await valid_gmail_link(session, user.id, gmail_connection_id)
+    if gmail_connection_id is not None and link is None:
+        raise NotFoundError("Gmail account not found")
+    connection = await get_connection(session, clerk_user_id, provider, connection_id)
+    config = {k: v for k, v in (connection.config or {}).items() if k != GMAIL_LINK_KEY}
+    if link:
+        config[GMAIL_LINK_KEY] = link
+    connection.config = config  # a NEW dict so SQLAlchemy sees the JSONB change
+    await session.commit()
 
 
 def is_default(connection: Connection) -> bool:
@@ -104,23 +178,27 @@ async def complete_google_connect(
 
     existing = await provider_connections(session, user.id, provider)
     connection: Connection | None = None
-    if provider == "gmail":
-        # Several Gmail accounts are allowed. Match by address: reconnecting the SAME account
+    if provider in ("gmail", "google_sheets"):
+        # Several Google accounts are allowed. Match by address: reconnecting the SAME account
         # refreshes it (free); a different address becomes a new account.
         connection = next(
             (c for c in existing if tokens.email and c.external_account_email == tokens.email),
             None,
         )
+        if connection is None and provider == "google_sheets" and len(existing) == 1:
+            # A login saved before addresses were recorded: refresh it rather than duplicate it.
+            if not existing[0].external_account_email:
+                connection = existing[0]
     elif existing:
         connection = existing[0]
     if connection is None:
-        if provider == "gmail" and len(existing) >= MAX_ACCOUNTS_PER_PROVIDER:
+        if provider in ("gmail", "google_sheets") and len(existing) >= MAX_ACCOUNTS_PER_PROVIDER:
+            noun = "Gmail accounts" if provider == "gmail" else "Google accounts for Sheets"
             raise TooManyAccounts(
-                f"You can connect up to {MAX_ACCOUNTS_PER_PROVIDER} Gmail accounts. "
-                "Disconnect one first."
+                f"You can connect up to {MAX_ACCOUNTS_PER_PROVIDER} {noun}. Disconnect one first."
             )
         connection = Connection(user_id=user.id, provider=provider)
-        if provider == "gmail" and not existing:
+        if provider in ("gmail", "google_sheets") and not existing:
             connection.config = {"default": True}
         if provider != "google_sheets":
             # Sheets are charged per sheet/tab added, not for the OAuth itself.
@@ -145,7 +223,36 @@ async def complete_google_connect(
 
     await session.commit()
     await session.refresh(connection)
+    await _link_matching_addresses(session, user.id, connection)
     return connection
+
+
+async def _link_matching_addresses(
+    session: AsyncSession, user_id: uuid.UUID, connection: Connection
+) -> None:
+    """A Sheets login and a Gmail account with the SAME Google address are the same person, so
+    they are linked (Sheets belongs to that Gmail). Only fills a missing link."""
+    email = connection.external_account_email
+    if not email or connection.provider not in ("gmail", "google_sheets"):
+        return
+    other = "gmail" if connection.provider == "google_sheets" else "google_sheets"
+    changed = False
+    for row in await provider_connections(session, user_id, other):
+        sheets, gmail = (connection, row) if other == "gmail" else (row, connection)
+        if row.external_account_email == email and not linked_gmail(sheets):
+            sheets.config = {**(sheets.config or {}), GMAIL_LINK_KEY: str(gmail.id)}
+            changed = True
+    if changed:
+        await session.commit()
+
+
+async def autolink_sheets(session: AsyncSession, user_id: uuid.UUID) -> None:
+    """Links Sheets logins connected before linking existed to the Gmail account with the
+    same address. Idempotent; run when the connections list is read."""
+    rows = await provider_connections(session, user_id, "google_sheets")
+    for row in rows:
+        if not linked_gmail(row):
+            await _link_matching_addresses(session, user_id, row)
 
 
 async def get_connection(
@@ -216,6 +323,12 @@ async def disconnect(
     was_default = is_default(connection)
     user_id, doomed = connection.user_id, connection.id
     await session.delete(connection)
+    if provider == "gmail":
+        # Workspaces that belonged to this Gmail account become unlinked.
+        for p in LINKED_PROVIDERS:
+            for c in await provider_connections(session, user_id, p):
+                if linked_gmail(c) == str(doomed):
+                    c.config = {k: v for k, v in (c.config or {}).items() if k != GMAIL_LINK_KEY}
     if was_default:
         # Hand the default to the oldest remaining account so one is always chosen.
         rows = await provider_connections(session, user_id, provider)

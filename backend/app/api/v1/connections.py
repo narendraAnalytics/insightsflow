@@ -30,6 +30,11 @@ from app.services import (
 router = APIRouter(prefix="/connections", tags=["connections"])
 
 
+class SetGmailLinkRequest(BaseModel):
+    # None unlinks the workspace from any Gmail account.
+    gmail_connection_id: uuid.UUID | None = None
+
+
 class ConnectUrlResponse(BaseModel):
     url: str
 
@@ -43,6 +48,8 @@ class AddSourceRequest(BaseModel):
     file_id: str = Field(min_length=10, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
     # None = the spreadsheet's first tab.
     tab_title: str | None = Field(default=None, max_length=255)
+    # Which Google login owns it; None = the default login.
+    connection_id: uuid.UUID | None = None
 
 
 class SheetPreviewResponse(BaseModel):
@@ -62,6 +69,7 @@ class TabsResponse(BaseModel):
 
 class DataSourceOut(BaseModel):
     id: uuid.UUID
+    connection_id: uuid.UUID
     spreadsheet_id: str
     name: str
     tab_title: str
@@ -73,6 +81,7 @@ class DataSourceOut(BaseModel):
     def from_model(cls, s: DataSource) -> "DataSourceOut":
         return cls(
             id=s.id,
+            connection_id=s.connection_id,
             spreadsheet_id=s.external_id,
             name=s.name,
             tab_title=s.tab_title,
@@ -95,6 +104,8 @@ class ConnectionResponse(BaseModel):
     # Notion only: the parent page approved reports are saved under (None until chosen).
     notion_page_id: str | None = None
     notion_page_title: str | None = None
+    # Slack/Notion only: the Gmail account (connection id) this workspace belongs to.
+    gmail_connection_id: str | None = None
     # Gmail may have several accounts; exactly one is the default (used unless a draft picks).
     is_default: bool = False
     sources: list[DataSourceOut]
@@ -115,14 +126,27 @@ class ConnectionResponse(BaseModel):
             slack_channel_name=cfg.get("channel_name"),
             notion_page_id=cfg.get("page_id") if c.provider == "notion" else None,
             notion_page_title=cfg.get("page_title") if c.provider == "notion" else None,
+            gmail_connection_id=cfg.get(connection_service.GMAIL_LINK_KEY),
             sources=[DataSourceOut.from_model(s) for s in sources],
         )
 
 
 @router.get("/google/connect-url", response_model=ConnectUrlResponse)
 async def google_connect_url(
+    # reconnect=true refreshes a login that's already connected; without it the OAuth adds one
+    # (up to the cap). Connecting a Google login is free: each sheet tab added is what costs.
+    reconnect: bool = Query(default=False),
     principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
 ) -> ConnectUrlResponse:
+    if not reconnect:
+        user = await connection_service.get_or_create_user(db, principal.user_id)
+        logins = await connection_service.provider_connections(db, user.id, "google_sheets")
+        if len(logins) >= connection_service.MAX_ACCOUNTS_PER_PROVIDER:
+            raise connection_service.TooManyAccounts(
+                f"You can connect up to {connection_service.MAX_ACCOUNTS_PER_PROVIDER} Google "
+                "accounts for Sheets. Disconnect one first."
+            )
     url = await connection_service.start_google_connect(principal.user_id)
     return ConnectUrlResponse(url=url)
 
@@ -135,17 +159,23 @@ async def google_callback(
 ) -> RedirectResponse:
     settings = get_settings()
     clerk_user_id, code_verifier = verify_state(state)
-    await connection_service.complete_google_connect(db, clerk_user_id, code, code_verifier)
-    redirect_url = f"{settings.frontend_url}/dashboard/integrations?connected=google_sheets"
-    return RedirectResponse(url=redirect_url)
+    base = f"{settings.frontend_url}/dashboard/integrations"
+    try:
+        await connection_service.complete_google_connect(db, clerk_user_id, code, code_verifier)
+    except connection_service.TooManyAccounts:
+        return RedirectResponse(url=f"{base}?sheets_error=limit")
+    return RedirectResponse(url=f"{base}?connected=google_sheets")
 
 
 @router.get("/google/picker-token", response_model=PickerTokenResponse)
 async def google_picker_token(
+    connection_id: uuid.UUID | None = Query(default=None),  # None = the default login
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> PickerTokenResponse:
-    connection = await connection_service.get_connection(db, principal.user_id)
+    connection = await connection_service.get_connection(
+        db, principal.user_id, "google_sheets", connection_id
+    )
     access_token = await connection_service.get_valid_access_token(db, connection)
     settings = get_settings()
     # The Picker's setAppId() wants the Drive project number, which is the
@@ -163,10 +193,11 @@ SpreadsheetId = Path(min_length=10, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
 @router.get("/google/spreadsheets/{spreadsheet_id}/tabs", response_model=TabsResponse)
 async def google_spreadsheet_tabs(
     spreadsheet_id: str = SpreadsheetId,
+    connection_id: uuid.UUID | None = Query(default=None),  # None = the default login
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> TabsResponse:
-    info = await data_source_service.list_tabs(db, principal.user_id, spreadsheet_id)
+    info = await data_source_service.list_tabs(db, principal.user_id, spreadsheet_id, connection_id)
     return TabsResponse(name=info.name, tabs=[TabOut(id=t.id, title=t.title) for t in info.tabs])
 
 
@@ -177,7 +208,7 @@ async def google_add_source(
     db: AsyncSession = Depends(get_db),
 ) -> DataSourceOut:
     source = await data_source_service.add_source(
-        db, principal.user_id, body.file_id, body.tab_title
+        db, principal.user_id, body.file_id, body.tab_title, body.connection_id
     )
     return DataSourceOut.from_model(source)
 
@@ -206,8 +237,11 @@ async def list_connections(
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> list[ConnectionResponse]:
+    user = await connection_service.get_or_create_user(db, principal.user_id)
+    await connection_service.autolink_sheets(db, user.id)
     connections = await connection_service.list_connections(db, principal.user_id)
     out: list[ConnectionResponse] = []
+    all_sources: list[DataSource] | None = None
     # Per provider that allows several accounts, the default: the flagged one, else the oldest.
     defaults: dict[str, uuid.UUID] = {}
     for provider in connection_service.MULTI_ACCOUNT_PROVIDERS:
@@ -216,10 +250,13 @@ async def list_connections(
         if flagged or rows:
             defaults[provider] = (flagged or rows[0]).id
     for connection in connections:
-        # Only Sheets connections own data sources; other providers (Gmail) have none.
+        # Only Sheets connections own data sources; other providers (Gmail) have none. Each
+        # Google login lists just its own tabs.
         sources: list[DataSource] = []
         if connection.provider == "google_sheets":
-            sources = await data_source_service.refresh_stale_sources(db, principal.user_id)
+            if all_sources is None:
+                all_sources = await data_source_service.refresh_stale_sources(db, principal.user_id)
+            sources = [s for s in all_sources if s.connection_id == connection.id]
         out.append(
             ConnectionResponse.from_model(
                 connection,
@@ -236,6 +273,37 @@ async def google_disconnect(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     await connection_service.disconnect(db, principal.user_id)
+
+
+@router.delete("/google/{connection_id}", status_code=204)
+async def google_disconnect_one(
+    connection_id: uuid.UUID,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Disconnects one Google login and its sheet tabs; the default passes to the next one."""
+    await connection_service.disconnect(db, principal.user_id, "google_sheets", connection_id)
+
+
+@router.post("/google/{connection_id}/default", status_code=204)
+async def google_make_default(
+    connection_id: uuid.UUID,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await connection_service.set_default(db, principal.user_id, connection_id, "google_sheets")
+
+
+@router.put("/google/{connection_id}/gmail", status_code=204)
+async def google_set_gmail(
+    connection_id: uuid.UUID,
+    body: SetGmailLinkRequest,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await connection_service.set_gmail_link(
+        db, principal.user_id, "google_sheets", connection_id, body.gmail_connection_id
+    )
 
 
 async def _require_credits_for_new_account(
@@ -327,12 +395,16 @@ class SlackChannelChoice(BaseModel):
 async def slack_connect_url(
     # reconnect=true refreshes a workspace that's already connected, for free.
     reconnect: bool = Query(default=False),
+    # The Gmail account this workspace belongs to (optional).
+    gmail_connection_id: uuid.UUID | None = Query(default=None),
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> ConnectUrlResponse:
     if not reconnect:
         await _require_credits_for_new_account(db, principal.user_id, "slack", "Slack workspaces")
-    return ConnectUrlResponse(url=slack_service.start_connect(principal.user_id))
+    return ConnectUrlResponse(
+        url=slack_service.start_connect(principal.user_id, gmail_connection_id)
+    )
 
 
 @router.get("/slack/callback")
@@ -346,9 +418,11 @@ async def slack_callback(
     # The user clicked "Cancel" on Slack's install screen (error=access_denied).
     if error or not code:
         return RedirectResponse(url=f"{base}?slack_error=denied")
-    clerk_user_id, _ = verify_state(state)
+    clerk_user_id, cv = verify_state(state)
     try:
-        await slack_service.complete_connect(db, clerk_user_id, code)
+        await slack_service.complete_connect(
+            db, clerk_user_id, code, connection_service.gmail_link_from_state(cv)
+        )
     except credit_service.InsufficientCredits:
         return RedirectResponse(url=f"{base}?billing=insufficient")
     except connection_service.TooManyAccounts:
@@ -410,6 +484,30 @@ async def slack_make_default(
     await connection_service.set_default(db, principal.user_id, connection_id, "slack")
 
 
+@router.put("/slack/{connection_id}/gmail", status_code=204)
+async def slack_set_gmail(
+    connection_id: uuid.UUID,
+    body: SetGmailLinkRequest,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await connection_service.set_gmail_link(
+        db, principal.user_id, "slack", connection_id, body.gmail_connection_id
+    )
+
+
+@router.put("/notion/{connection_id}/gmail", status_code=204)
+async def notion_set_gmail(
+    connection_id: uuid.UUID,
+    body: SetGmailLinkRequest,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await connection_service.set_gmail_link(
+        db, principal.user_id, "notion", connection_id, body.gmail_connection_id
+    )
+
+
 class NotionPageOut(BaseModel):
     id: str
     title: str
@@ -428,12 +526,16 @@ class NotionPageChoice(BaseModel):
 async def notion_connect_url(
     # reconnect=true refreshes a workspace that's already connected, for free.
     reconnect: bool = Query(default=False),
+    # The Gmail account this workspace belongs to (optional).
+    gmail_connection_id: uuid.UUID | None = Query(default=None),
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> ConnectUrlResponse:
     if not reconnect:
         await _require_credits_for_new_account(db, principal.user_id, "notion", "Notion workspaces")
-    return ConnectUrlResponse(url=notion_service.start_connect(principal.user_id))
+    return ConnectUrlResponse(
+        url=notion_service.start_connect(principal.user_id, gmail_connection_id)
+    )
 
 
 @router.get("/notion/callback")
@@ -447,9 +549,11 @@ async def notion_callback(
     # The user clicked "Cancel" on Notion's consent screen (error=access_denied).
     if error or not code:
         return RedirectResponse(url=f"{base}?notion_error=denied")
-    clerk_user_id, _ = verify_state(state)
+    clerk_user_id, cv = verify_state(state)
     try:
-        await notion_service.complete_connect(db, clerk_user_id, code)
+        await notion_service.complete_connect(
+            db, clerk_user_id, code, connection_service.gmail_link_from_state(cv)
+        )
     except credit_service.InsufficientCredits:
         return RedirectResponse(url=f"{base}?billing=insufficient")
     except connection_service.TooManyAccounts:

@@ -8,7 +8,6 @@ the only way anything is written to Notion.
 """
 
 import asyncio
-import secrets
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -39,14 +38,22 @@ class NotionDraftAlreadySaved(AppError):
     code = "draft_already_sent"
 
 
-def start_connect(clerk_user_id: str) -> str:
+def start_connect(clerk_user_id: str, gmail_connection_id: uuid.UUID | None = None) -> str:
     """The Notion consent URL. Notion's `state` is our signed token (HMAC + 10-minute
-    expiry = CSRF protection); the `cv` slot just carries a random nonce, as for Slack."""
-    return notion.build_auth_url(sign_state(clerk_user_id, secrets.token_urlsafe(16)))
+    expiry = CSRF protection); the `cv` slot carries a nonce, or the Gmail account this
+    workspace should belong to, as for Slack."""
+    cv = connection_service.gmail_link_state(gmail_connection_id)
+    return notion.build_auth_url(sign_state(clerk_user_id, cv))
 
 
-async def complete_connect(session: AsyncSession, clerk_user_id: str, code: str) -> Connection:
+async def complete_connect(
+    session: AsyncSession,
+    clerk_user_id: str,
+    code: str,
+    gmail_connection_id: uuid.UUID | None = None,
+) -> Connection:
     user = await connection_service.get_or_create_user(session, clerk_user_id)
+    gmail_link = await connection_service.valid_gmail_link(session, user.id, gmail_connection_id)
     install = await asyncio.to_thread(notion.exchange_code, code)
     access_enc, key_version = encrypt_token(install.access_token)
     refresh_enc = encrypt_token(install.refresh_token)[0] if install.refresh_token else None
@@ -81,9 +88,11 @@ async def complete_connect(session: AsyncSession, clerk_user_id: str, code: str)
         "bot_id": install.bot_id,
     }
     # Reconnecting the SAME workspace keeps its chosen page and default flag.
-    for key in ("page_id", "page_title", "default"):
+    for key in ("page_id", "page_title", "default", connection_service.GMAIL_LINK_KEY):
         if previous.get(key):
             config[key] = previous[key]
+    if gmail_link:  # a Gmail chosen on this connect wins over the old one
+        config[connection_service.GMAIL_LINK_KEY] = gmail_link
 
     connection.status = "connected"
     connection.external_account_email = install.workspace_name  # shown as the account label
@@ -167,23 +176,26 @@ async def set_page(
     return connection.config
 
 
-async def default_page(session: AsyncSession, clerk_user_id: str) -> dict[str, str] | None:
-    """{id, title} of the default workspace's parent page if one is chosen.
-    Never raises its own errors — it only decides whether the agent may offer
-    `draft_notion_page`."""
-    try:
-        connection = await connection_service.get_connection(session, clerk_user_id, PROVIDER)
-    except NotFoundError:
-        return None
-    cfg = connection.config or {}
-    if connection.status != "connected" or not cfg.get("page_id"):
-        return None
-    return {
-        "id": cfg["page_id"],
-        "title": cfg.get("page_title", ""),
-        "connection_id": str(connection.id),
-        "workspace": connection.external_account_email or "",
-    }
+async def default_page(
+    session: AsyncSession, clerk_user_id: str, gmail_connection_id: uuid.UUID | None = None
+) -> dict[str, str] | None:
+    """{id, title, connection_id, workspace} of the parent page the agent drafts under: the
+    first ready workspace that belongs to the chat's Gmail account (default workspace first),
+    else the default workspace. Never raises its own errors — it only decides whether the
+    agent may offer `draft_notion_page`."""
+    user = await connection_service.get_or_create_user(session, clerk_user_id)
+    rows = await connection_service.provider_connections(session, user.id, PROVIDER)
+    gmail_id = await connection_service.effective_gmail_id(session, user.id, gmail_connection_id)
+    for connection in connection_service.for_gmail(rows, gmail_id):
+        cfg = connection.config or {}
+        if connection.status == "connected" and cfg.get("page_id"):
+            return {
+                "id": cfg["page_id"],
+                "title": cfg.get("page_title", ""),
+                "connection_id": str(connection.id),
+                "workspace": connection.external_account_email or "",
+            }
+    return None
 
 
 async def disconnect(
