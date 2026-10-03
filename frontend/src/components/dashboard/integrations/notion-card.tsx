@@ -17,7 +17,8 @@ function ConnectGuide({ cost }: { cost: number }) {
       <p className={`${zeyada} text-[22px] leading-none text-(--flow-ink)`}>How connecting works</p>
       <ol className={`list-decimal space-y-0.5 pl-5 ${zeyada} text-[20px] leading-snug text-(--flow-ink)/80`}>
         <li>
-          Notion opens. Sign in with the account you want, and choose{" "}
+          Notion opens using the account this browser is signed in to (to use a different email, log out of Notion
+          first or use a private window). Choose{" "}
           <strong className="font-normal text-(--flow-magenta)">your workspace</strong> from the menu at the top.
         </li>
         <li>Pick the pages to share, then Allow. You&apos;ll come back here, and {cost} credits are used once it&apos;s saved.</li>
@@ -308,7 +309,13 @@ export function NotionCard() {
           </ul>
           <p className={`${zeyada} text-[20px] leading-snug text-(--flow-ink)/70`}>
             In AI Insights, ask &ldquo;save this to Notion&rdquo; and review the draft before it&apos;s saved. To add
-            another workspace, sign in with that Notion account (or pick the workspace) on Notion&apos;s page.
+            another workspace, pick it from the menu on Notion&apos;s page.
+          </p>
+          <p className={`${zeyada} text-[20px] leading-snug text-(--flow-ink)/70`}>
+            Notion has no account chooser: it uses whichever Notion account this browser is already signed in to. To
+            connect a workspace from a <strong className="font-normal text-(--flow-magenta)">different email</strong>,
+            sign out of Notion first (notion.so → your name → Log out), or open InsightFlow in a private window, then
+            click Connect another workspace.
           </p>
           <div>
             <button

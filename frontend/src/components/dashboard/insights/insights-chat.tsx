@@ -21,8 +21,8 @@ import NextLink from "next/link";
 import { GmailGlyph, NotionGlyph, SlackGlyph } from "@/components/site/brand-icons";
 import { useGmailConnection, type GmailConnection } from "@/hooks/use-gmail-connection";
 import { documentAsSource, useDocuments } from "@/hooks/use-documents";
-import { useNotionConnection } from "@/hooks/use-notion-connection";
-import { useSlackConnection } from "@/hooks/use-slack-connection";
+import { useNotionConnection, type NotionConnection } from "@/hooks/use-notion-connection";
+import { useSlackConnection, type SlackConnection } from "@/hooks/use-slack-connection";
 import { sourceLabel, useGoogleSheetsConnection, type DataSource } from "@/hooks/use-google-sheets-connection";
 import {
   isEmailDraft,
@@ -535,8 +535,13 @@ function SourcePicker({
 
 /** Slack isn't something you ask about — it's where results go. So it's a status pill, not a
  * checkbox: lit with the channel when posting is ready, a nudge to finish setup otherwise. */
-function SlackStatus({ channelName, connected }: { channelName: string | null; connected: boolean }) {
-  if (!connected) return null;
+function SlackStatus({ accounts }: { accounts: SlackConnection[] }) {
+  const live = accounts.filter((a) => a.status === "connected");
+  if (live.length === 0) return null;
+  const ready = live.filter((a) => a.slack_channel_name);
+  const channelName = ready[0]?.slack_channel_name ?? null; // accounts arrive default-first
+  const detail = ready.length > 1 ? `${ready.length} workspaces` : channelName ? `#${channelName}` : "";
+  const names = ready.map((a) => `${a.external_account_email} #${a.slack_channel_name}`).join(", ");
   const base =
     "inline-flex items-center gap-2 rounded-full border border-(--flow-cream) bg-(--flow-cream)/80 px-3.5 py-1.5 font-(family-name:--font-zeyada) text-[21px] leading-none font-normal text-(--flow-ink)/85";
   return (
@@ -545,10 +550,10 @@ function SlackStatus({ channelName, connected }: { channelName: string | null; c
         <span
           className={base}
           style={{ boxShadow: raised("var(--flow-peach)") }}
-          title="Ask AI Insights to post an answer to Slack. You review the draft before anything is posted."
+          title={`Ask AI Insights to post an answer to Slack (${names}). You review the draft before anything is posted.`}
         >
           <SlackGlyph aria-hidden className="size-4 shrink-0" />
-          Slack ready · #{channelName}
+          Slack ready · {detail}
         </span>
       ) : (
         <NextLink href="/dashboard/integrations" className={`${base} hover:-translate-y-0.5 transition-transform`}>
@@ -561,15 +566,19 @@ function SlackStatus({ channelName, connected }: { channelName: string | null; c
 }
 
 /** Same idea for Notion: where reports can be saved, and which page they go under. */
-function NotionStatus({ pageTitle, connected }: { pageTitle: string | null; connected: boolean }) {
-  if (!connected) return null;
+function NotionStatus({ accounts }: { accounts: NotionConnection[] }) {
+  const live = accounts.filter((a) => a.status === "connected");
+  if (live.length === 0) return null;
+  const ready = live.filter((a) => a.notion_page_title);
+  const pageTitle = ready.length > 1 ? `${ready.length} workspaces` : (ready[0]?.notion_page_title ?? null);
+  const names = ready.map((a) => `${a.external_account_email} · ${a.notion_page_title}`).join(", ");
   const base =
     "inline-flex items-center gap-2 rounded-full border border-(--flow-cream) bg-(--flow-cream)/80 px-3.5 py-1.5 font-(family-name:--font-zeyada) text-[21px] leading-none font-normal text-(--flow-ink)/85";
   return pageTitle ? (
     <span
       className={base}
       style={{ boxShadow: raised("var(--flow-peach)") }}
-      title="Ask AI Insights to save an answer to Notion. You review the draft before anything is saved."
+      title={`Ask AI Insights to save an answer to Notion (${names}). You review the draft before anything is saved.`}
     >
       <NotionGlyph aria-hidden className="size-4 shrink-0" />
       Notion ready · {pageTitle}
@@ -584,8 +593,8 @@ function NotionStatus({ pageTitle, connected }: { pageTitle: string | null; conn
 
 export function InsightsChat() {
   const reduce = useReducedMotion();
-  const { connection: slackConnection } = useSlackConnection();
-  const { connection: notionConnection } = useNotionConnection();
+  const { accounts: slackAccounts } = useSlackConnection();
+  const { accounts: notionAccounts } = useNotionConnection();
   const { connection, loading } = useGoogleSheetsConnection();
   const { accounts: gmailAccounts, loading: gmailLoading } = useGmailConnection();
   const { documents, loading: documentsLoading } = useDocuments();
@@ -760,14 +769,8 @@ export function InsightsChat() {
         onChange={setSourceIds}
       />
       <div className="-mt-3 mb-5 flex flex-wrap items-center gap-2 self-start">
-        <SlackStatus
-          connected={slackConnection?.status === "connected"}
-          channelName={slackConnection?.slack_channel_name ?? null}
-        />
-        <NotionStatus
-          connected={notionConnection?.status === "connected"}
-          pageTitle={notionConnection?.notion_page_title ?? null}
-        />
+        <SlackStatus accounts={slackAccounts} />
+        <NotionStatus accounts={notionAccounts} />
       </div>
       {sourceRemoved && (
         <p
