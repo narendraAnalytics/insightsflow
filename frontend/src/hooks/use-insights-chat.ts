@@ -62,12 +62,18 @@ export type NotionDraft = {
   kind: "notion";
   page_id: string;
   page_title: string;
+  /** The Notion workspace the draft was made for (and, once saved, where it went). */
+  connection_id?: string;
+  workspace?: string;
   title: string;
   body: string;
   status: "draft" | "sent";
   sent_at?: string;
   url?: string;
 };
+
+/** Which connected Notion workspace a page is saved to; omitted = the one the draft was made for. */
+export type NotionTarget = { id: string; workspace: string; pageTitle: string };
 
 export type Draft = EmailDraft | SlackDraft | NotionDraft;
 
@@ -78,7 +84,7 @@ export const isEmailDraft = (d: Draft): d is EmailDraft => !("kind" in d);
 /** What the draft card can do — each one is the user's own click (the approval step). */
 export type DraftActions = {
   /** Saves the (possibly edited) page under the draft's parent page. */
-  saveNotion: (stepId: string, title: string, body: string) => Promise<void>;
+  saveNotion: (stepId: string, title: string, body: string, target?: NotionTarget) => Promise<void>;
   /** Posts the (possibly edited) message to `channelId`. */
   postSlack: (stepId: string, channelId: string, text: string, target?: SlackTarget) => Promise<void>;
   send: (stepId: string, fields: DraftFields, sender?: Sender) => Promise<void>;
@@ -385,21 +391,37 @@ export function useInsightsChat(enabled: boolean, sources: DataSource[], gmailRe
   const draftActions = useMemo<DraftActions>(
     () => ({
       /** Saves a Notion draft now. */
-      saveNotion: async (stepId, title, body) => {
+      saveNotion: async (stepId, title, body, target) => {
         const conversation = conversationIdRef.current;
         if (!conversation) throw new Error("Open the chat again to save this page.");
         const token = await getToken();
         const res = await apiFetch<{ status: string; sent_at: string; url: string }>(
           "/api/v1/insights/notion/save",
           token,
-          { method: "POST", body: { conversation_id: conversation, step_id: stepId, title, body } }
+          {
+            method: "POST",
+            body: { conversation_id: conversation, step_id: stepId, title, body, connection_id: target?.id },
+          }
         );
         setMessages((prev) =>
           prev.map((m) => ({
             ...m,
             steps: m.steps.map((s) =>
               s.id === stepId && s.draft && isNotionDraft(s.draft)
-                ? { ...s, draft: { ...s.draft, title, body, status: "sent", sent_at: res.sent_at, url: res.url } }
+                ? {
+                    ...s,
+                    draft: {
+                      ...s.draft,
+                      title,
+                      body,
+                      status: "sent",
+                      sent_at: res.sent_at,
+                      url: res.url,
+                      ...(target
+                        ? { connection_id: target.id, workspace: target.workspace, page_title: target.pageTitle }
+                        : {}),
+                    },
+                  }
                 : s
             ),
           }))

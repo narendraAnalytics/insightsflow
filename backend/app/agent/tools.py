@@ -398,6 +398,8 @@ def build_tools(
                 "kind": "notion",
                 "page_id": notion_page["id"],
                 "page_title": notion_page["title"],
+                "connection_id": notion_page.get("connection_id", ""),
+                "workspace": notion_page.get("workspace", ""),
                 "title": title,
                 "body": body,
                 "status": "draft",

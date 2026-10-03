@@ -10,7 +10,8 @@ import {
   FloppyDisk,
   WarningCircle,
 } from "@phosphor-icons/react";
-import type { NotionDraft } from "@/hooks/use-insights-chat";
+import type { NotionDraft, NotionTarget } from "@/hooks/use-insights-chat";
+import { useNotionConnection } from "@/hooks/use-notion-connection";
 
 const zeyada = "font-(family-name:--font-zeyada) font-normal";
 const cardShadow = "0 24px 36px -22px color-mix(in oklab, var(--flow-magenta) 50%, transparent)";
@@ -32,10 +33,20 @@ export function NotionDraftCard({
   onSave,
 }: {
   draft: NotionDraft;
-  onSave: (title: string, body: string) => Promise<void>;
+  onSave: (title: string, body: string, target?: NotionTarget) => Promise<void>;
 }) {
   const reduce = useReducedMotion();
   const uid = useId();
+  // With several workspaces the user picks where it goes; each saves under its own chosen page.
+  const { accounts } = useNotionConnection();
+  const targets = accounts.filter((a) => a.status === "connected" && a.notion_page_id);
+  const [targetId, setTargetId] = useState<string | null>(null);
+  const chosen =
+    targets.find((a) => a.id === targetId) ??
+    targets.find((a) => a.id === draft.connection_id) ??
+    targets.find((a) => a.is_default) ??
+    targets[0];
+  const multi = targets.length > 1 && chosen !== undefined;
   const [title, setTitle] = useState(draft.title);
   const [body, setBody] = useState(draft.body);
   const [busy, setBusy] = useState(false);
@@ -59,7 +70,15 @@ export function NotionDraftCard({
     setError(null);
     setBusy(true);
     try {
-      await onSave(title.trim(), body.trim());
+      if (multi) {
+        await onSave(title.trim(), body.trim(), {
+          id: chosen.id,
+          workspace: chosen.external_account_email ?? "",
+          pageTitle: chosen.notion_page_title ?? "",
+        });
+      } else {
+        await onSave(title.trim(), body.trim());
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't save to Notion. Try again.");
       setBusy(false);
@@ -107,6 +126,7 @@ export function NotionDraftCard({
               <div className="mt-1 flex flex-wrap items-center gap-3">
                 <span className={`${zeyada} text-[20px] leading-none text-(--flow-ink)/60`}>
                   Under {draft.page_title || "your page"}
+                  {draft.workspace ? ` in ${draft.workspace}` : ""}
                   {savedWhen(draft.sent_at) ? ` · ${savedWhen(draft.sent_at)}` : ""}
                 </span>
                 {draft.url && (
@@ -173,9 +193,30 @@ export function NotionDraftCard({
             </div>
 
             <div className="px-4 pt-1 pb-4">
-              <p className={`pt-1 ${zeyada} text-[22px] leading-none text-(--flow-magenta)`}>
-                Under <span className="text-(--flow-ink)">{draft.page_title || "your chosen page"}</span>
-              </p>
+              {multi ? (
+                <div className="flex items-center gap-2 pt-1">
+                  <label htmlFor={`${uid}-to`} className={`${zeyada} text-[22px] leading-none text-(--flow-magenta)`}>
+                    Save to
+                  </label>
+                  <select
+                    id={`${uid}-to`}
+                    value={chosen.id}
+                    onChange={(e) => setTargetId(e.target.value)}
+                    className="min-w-0 flex-1 cursor-pointer rounded-lg bg-transparent py-1 text-[14px] text-(--flow-ink) outline-none focus-visible:ring-2 focus-visible:ring-(--flow-magenta)/50"
+                  >
+                    {targets.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.external_account_email} · {a.notion_page_title}
+                        {a.is_default ? " (default)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <p className={`pt-1 ${zeyada} text-[22px] leading-none text-(--flow-magenta)`}>
+                  Under <span className="text-(--flow-ink)">{draft.page_title || "your chosen page"}</span>
+                </p>
+              )}
               <label htmlFor={`${uid}-title`} className="sr-only">
                 Page title
               </label>

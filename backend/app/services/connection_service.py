@@ -27,8 +27,8 @@ class ConnectionExpired(AppError):
     code = "connection_expired"
 
 
-# Providers that may have several accounts per user (Gmail first, then Slack).
-MULTI_ACCOUNT_PROVIDERS = ("gmail", "slack")
+# Providers that may have several accounts per user (Gmail first, then Slack, Notion).
+MULTI_ACCOUNT_PROVIDERS = ("gmail", "slack", "notion")
 
 
 class TooManyAccounts(AppError):

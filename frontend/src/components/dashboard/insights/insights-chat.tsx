@@ -198,7 +198,7 @@ function AssistantMessage({
             <NotionDraftCard
               key={s.id}
               draft={s.draft}
-              onSave={(title, body) => draftActions.saveNotion(s.id, title, body)}
+              onSave={(title, body, target) => draftActions.saveNotion(s.id, title, body, target)}
             />
           ) : s.draft && isSlackDraft(s.draft) ? (
             <SlackDraftCard

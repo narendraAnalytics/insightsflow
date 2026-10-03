@@ -241,6 +241,8 @@ def test_tool_returns_a_draft_for_the_fixed_page():
         "kind": "notion",
         "page_id": PAGE_ID,
         "page_title": "Reports",
+        "connection_id": "",
+        "workspace": "",
         "title": "West leads Q3",
         "body": "- West 5,00,000",
         "status": "draft",

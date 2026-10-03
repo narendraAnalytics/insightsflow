@@ -12,7 +12,6 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.errors import NotFoundError
 from app.core.oauth_state import verify_state
 from app.core.security import Principal, get_current_principal
 from app.db.models.connection import Connection
@@ -254,15 +253,6 @@ async def _require_credits_for_new_account(
     await credit_service.require_credits(db, clerk_user_id, credit_service.CONNECT_COST)
 
 
-async def _require_credits_if_new(db: AsyncSession, clerk_user_id: str, provider: str) -> None:
-    """A first connect of `provider` costs credits; reconnecting an existing one is free.
-    Checked before OAuth starts so the user isn't sent off to consent and then refused."""
-    try:
-        await connection_service.get_connection(db, clerk_user_id, provider)
-    except NotFoundError:
-        await credit_service.require_credits(db, clerk_user_id, credit_service.CONNECT_COST)
-
-
 @router.get("/gmail/connect-url", response_model=ConnectUrlResponse)
 async def gmail_connect_url(
     # reconnect=true refreshes an account that's already connected (e.g. its login expired)
@@ -436,10 +426,13 @@ class NotionPageChoice(BaseModel):
 
 @router.get("/notion/connect-url", response_model=ConnectUrlResponse)
 async def notion_connect_url(
+    # reconnect=true refreshes a workspace that's already connected, for free.
+    reconnect: bool = Query(default=False),
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> ConnectUrlResponse:
-    await _require_credits_if_new(db, principal.user_id, "notion")
+    if not reconnect:
+        await _require_credits_for_new_account(db, principal.user_id, "notion", "Notion workspaces")
     return ConnectUrlResponse(url=notion_service.start_connect(principal.user_id))
 
 
@@ -459,32 +452,46 @@ async def notion_callback(
         await notion_service.complete_connect(db, clerk_user_id, code)
     except credit_service.InsufficientCredits:
         return RedirectResponse(url=f"{base}?billing=insufficient")
+    except connection_service.TooManyAccounts:
+        return RedirectResponse(url=f"{base}?notion_error=limit")
     return RedirectResponse(url=f"{base}?connected=notion")
 
 
-@router.get("/notion/pages", response_model=list[NotionPageOut])
+@router.get("/notion/{connection_id}/pages", response_model=list[NotionPageOut])
 async def notion_pages(
+    connection_id: uuid.UUID,
     q: str = Query(default="", max_length=100),
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> list[NotionPageOut]:
-    pages = await notion_service.list_pages(db, principal.user_id, q)
+    pages = await notion_service.list_pages(db, principal.user_id, q, connection_id)
     return [NotionPageOut(id=p.id, title=p.title) for p in pages]
 
 
-@router.put("/notion/page", response_model=NotionPageChoice)
+@router.put("/notion/{connection_id}/page", response_model=NotionPageChoice)
 async def notion_set_page(
+    connection_id: uuid.UUID,
     body: SetNotionPageRequest,
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> NotionPageChoice:
-    config = await notion_service.set_page(db, principal.user_id, body.page_id)
+    config = await notion_service.set_page(db, principal.user_id, body.page_id, connection_id)
     return NotionPageChoice(page_id=config["page_id"], page_title=config["page_title"])
 
 
-@router.delete("/notion", status_code=204)
+@router.delete("/notion/{connection_id}", status_code=204)
 async def notion_disconnect(
+    connection_id: uuid.UUID,
     principal: Principal = Depends(get_current_principal),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    await notion_service.disconnect(db, principal.user_id)
+    await notion_service.disconnect(db, principal.user_id, connection_id)
+
+
+@router.post("/notion/{connection_id}/default", status_code=204)
+async def notion_make_default(
+    connection_id: uuid.UUID,
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await connection_service.set_default(db, principal.user_id, connection_id, "notion")

@@ -15,7 +15,6 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crypto import decrypt_token, encrypt_token
@@ -52,12 +51,22 @@ async def complete_connect(session: AsyncSession, clerk_user_id: str, code: str)
     access_enc, key_version = encrypt_token(install.access_token)
     refresh_enc = encrypt_token(install.refresh_token)[0] if install.refresh_token else None
 
-    result = await session.execute(
-        select(Connection).where(Connection.user_id == user.id, Connection.provider == PROVIDER)
+    existing = await connection_service.provider_connections(session, user.id, PROVIDER)
+    # One connection per Notion workspace: installing into a workspace that's already
+    # connected refreshes it (free); a different workspace is added and charged.
+    connection = next(
+        (c for c in existing if (c.config or {}).get("workspace_id") == install.workspace_id),
+        None,
     )
-    connection = result.scalar_one_or_none()
     if connection is None:
+        if len(existing) >= connection_service.MAX_ACCOUNTS_PER_PROVIDER:
+            raise connection_service.TooManyAccounts(
+                f"You can connect up to {connection_service.MAX_ACCOUNTS_PER_PROVIDER} Notion "
+                "workspaces. Disconnect one first."
+            )
         connection = Connection(user_id=user.id, provider=PROVIDER)
+        if not existing:
+            connection.config = {"default": True}
         # Debit BEFORE adding the row: spend() flushes, and a new connection can't be flushed
         # until its (NOT NULL) token fields are filled in below. Both land in one commit.
         await credit_service.spend(
@@ -71,11 +80,10 @@ async def complete_connect(session: AsyncSession, clerk_user_id: str, code: str)
         "workspace_name": install.workspace_name,
         "bot_id": install.bot_id,
     }
-    # Reconnecting to the SAME workspace keeps the chosen page; a different one resets it.
-    if previous.get("workspace_id") == install.workspace_id:
-        for key in ("page_id", "page_title"):
-            if previous.get(key):
-                config[key] = previous[key]
+    # Reconnecting the SAME workspace keeps its chosen page and default flag.
+    for key in ("page_id", "page_title", "default"):
+        if previous.get(key):
+            config[key] = previous[key]
 
     connection.status = "connected"
     connection.external_account_email = install.workspace_name  # shown as the account label
@@ -91,9 +99,14 @@ async def complete_connect(session: AsyncSession, clerk_user_id: str, code: str)
     return connection
 
 
-async def _get(session: AsyncSession, clerk_user_id: str) -> Connection:
+async def _get(
+    session: AsyncSession, clerk_user_id: str, connection_id: uuid.UUID | None = None
+) -> Connection:
+    """The workspace with `connection_id`, else the user's default one."""
     try:
-        connection = await connection_service.get_connection(session, clerk_user_id, PROVIDER)
+        connection = await connection_service.get_connection(
+            session, clerk_user_id, PROVIDER, connection_id
+        )
     except NotFoundError:
         raise NotionNotConnected("Connect Notion on the Integrations page first.") from None
     if connection.status != "connected":
@@ -125,16 +138,24 @@ async def _call[T](
 
 
 async def list_pages(
-    session: AsyncSession, clerk_user_id: str, query: str = ""
+    session: AsyncSession,
+    clerk_user_id: str,
+    query: str = "",
+    connection_id: uuid.UUID | None = None,
 ) -> list[notion.NotionPage]:
-    connection = await _get(session, clerk_user_id)
+    connection = await _get(session, clerk_user_id, connection_id)
     return await _call(session, connection, notion.search_pages, query)
 
 
-async def set_page(session: AsyncSession, clerk_user_id: str, page_id: str) -> dict[str, Any]:
+async def set_page(
+    session: AsyncSession,
+    clerk_user_id: str,
+    page_id: str,
+    connection_id: uuid.UUID | None = None,
+) -> dict[str, Any]:
     """Saves the parent page for approved reports. Notion is asked for the page itself, so
     only a page the connection can really reach can be chosen and the title is Notion's."""
-    connection = await _get(session, clerk_user_id)
+    connection = await _get(session, clerk_user_id, connection_id)
     page = await _call(session, connection, notion.get_page, page_id)
     # A NEW dict so SQLAlchemy sees the JSONB change.
     connection.config = {
@@ -147,7 +168,7 @@ async def set_page(session: AsyncSession, clerk_user_id: str, page_id: str) -> d
 
 
 async def default_page(session: AsyncSession, clerk_user_id: str) -> dict[str, str] | None:
-    """{id, title} of the chosen parent page if Notion is connected and one is chosen.
+    """{id, title} of the default workspace's parent page if one is chosen.
     Never raises its own errors — it only decides whether the agent may offer
     `draft_notion_page`."""
     try:
@@ -157,15 +178,24 @@ async def default_page(session: AsyncSession, clerk_user_id: str) -> dict[str, s
     cfg = connection.config or {}
     if connection.status != "connected" or not cfg.get("page_id"):
         return None
-    return {"id": cfg["page_id"], "title": cfg.get("page_title", "")}
+    return {
+        "id": cfg["page_id"],
+        "title": cfg.get("page_title", ""),
+        "connection_id": str(connection.id),
+        "workspace": connection.external_account_email or "",
+    }
 
 
-async def disconnect(session: AsyncSession, clerk_user_id: str) -> None:
-    """Deletes our copy of the tokens. Notion has no revoke call we rely on, so the user can
-    also remove the connection in Notion (Settings -> Connections)."""
-    connection = await connection_service.get_connection(session, clerk_user_id, PROVIDER)
-    await session.delete(connection)
-    await session.commit()
+async def disconnect(
+    session: AsyncSession, clerk_user_id: str, connection_id: uuid.UUID | None = None
+) -> None:
+    """Deletes our copy of the tokens (and hands the default to the next workspace if this
+    was the default). Notion has no revoke call we rely on, so the user can also remove the
+    connection in Notion (Settings -> Connections)."""
+    connection = await connection_service.get_connection(
+        session, clerk_user_id, PROVIDER, connection_id
+    )
+    await connection_service.disconnect(session, clerk_user_id, PROVIDER, connection.id)
 
 
 async def save_draft(
@@ -175,10 +205,12 @@ async def save_draft(
     step_id: str,
     title: str,
     body: str,
+    connection_id: uuid.UUID | None = None,
 ) -> dict[str, Any]:
     """Creates the Notion page from the user's final (possibly edited) draft and marks it
-    saved. The parent page is the one stored on the draft — what the card showed — never
-    a value from the request."""
+    saved. The parent page is never a value from the request: it is the one stored on the
+    draft (what the card showed), or — when the card picked a different workspace — that
+    workspace's own chosen page."""
     await chat_service.get_owned_conversation(session, clerk_user_id, conversation_id)
 
     message, index = await email_service.locate_draft(session, conversation_id, step_id)
@@ -188,8 +220,22 @@ async def save_draft(
     if draft.get("status") == "sent":
         raise NotionDraftAlreadySaved("This page was already saved to Notion.")
 
-    page_id, title, body = notion.validated_page(draft.get("page_id", ""), title, body)
-    connection = await _get(session, clerk_user_id)
+    # No explicit choice = the workspace the draft was made for (falls back to the default).
+    drafted_for = draft.get("connection_id") or None
+    if connection_id is None and drafted_for:
+        try:
+            connection_id = uuid.UUID(drafted_for)
+        except ValueError:
+            connection_id = None
+    connection = await _get(session, clerk_user_id, connection_id)
+    cfg = connection.config or {}
+    page_id = draft.get("page_id", "")
+    page_title = draft.get("page_title", "")
+    if drafted_for and str(connection.id) != drafted_for:
+        if not cfg.get("page_id"):
+            raise NotionNotConnected("Choose a parent page for that workspace first.")
+        page_id, page_title = cfg["page_id"], cfg.get("page_title", "")
+    page_id, title, body = notion.validated_page(page_id, title, body)
     _, url = await _call(session, connection, notion.create_page, page_id, title, body)
 
     saved_at = datetime.now(UTC).isoformat()
@@ -199,7 +245,9 @@ async def save_draft(
         {
             "kind": "notion",
             "page_id": page_id,
-            "page_title": draft.get("page_title", ""),
+            "page_title": page_title,
+            "workspace": connection.external_account_email,
+            "connection_id": str(connection.id),
             "title": title,
             "body": body,
             "status": "sent",

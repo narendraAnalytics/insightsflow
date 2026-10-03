@@ -307,7 +307,7 @@ export function ProjectsGrid() {
   const gmailConnected = gmailConnection?.status === "connected";
   const { accounts: slackAccounts, connection: slackConnection, connect: connectSlack } = useSlackConnection();
   const slackConnected = slackConnection?.status === "connected";
-  const { connection: notionConnection, connect: connectNotion } = useNotionConnection();
+  const { accounts: notionAccounts, connection: notionConnection, connect: connectNotion } = useNotionConnection();
   const notionConnected = notionConnection?.status === "connected";
   const sources = connection?.sources ?? [];
   const projects = groupProjects(sources);
@@ -369,8 +369,15 @@ export function ProjectsGrid() {
       Glyph: NotionGlyph,
       connected: notionConnected,
       costsOnConnect: true,
-      detail: [notionConnection?.external_account_email, notionConnection?.notion_page_title].filter(Boolean).join(" · "),
-      connect: connectNotion,
+      detail: [
+        notionConnection?.external_account_email,
+        notionConnection?.notion_page_title,
+        notionAccounts.length > 1 && `+${notionAccounts.length - 1} more`,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      connect: () => connectNotion(),
+      addAnother: () => connectNotion(),
     },
   ];
 

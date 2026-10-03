@@ -218,6 +218,8 @@ class SaveNotionRequest(BaseModel):
     step_id: str = Field(min_length=1, max_length=200)  # the draft_notion_page call's id
     title: str = Field(min_length=1, max_length=300)
     body: str = Field(min_length=1, max_length=30000)
+    # Which connected Notion workspace to save to; None = the one the draft was made for.
+    connection_id: uuid.UUID | None = None
 
 
 class SaveNotionResponse(BaseModel):
@@ -233,9 +235,16 @@ async def save_notion(
     db: AsyncSession = Depends(get_db),
 ) -> SaveNotionResponse:
     """Saves a Notion draft the user approved on the draft card — the only way anything is
-    written to Notion. The parent page comes from the stored draft, not this request."""
+    written to Notion. The parent page comes from the stored draft (or the chosen
+    workspace's), never from this request."""
     saved = await notion_service.save_draft(
-        db, principal.user_id, body.conversation_id, body.step_id, body.title, body.body
+        db,
+        principal.user_id,
+        body.conversation_id,
+        body.step_id,
+        body.title,
+        body.body,
+        body.connection_id,
     )
     return SaveNotionResponse(**saved)
 
