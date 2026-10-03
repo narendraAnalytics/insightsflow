@@ -185,3 +185,13 @@ async def test_stale_sources_are_read_with_their_own_logins_token(
     monkeypatch.setattr(data_source_service.google_sheets, "fetch_sheet_metadata", fetch)
     await data_source_service.refresh_stale_sources(FakeSession([]), "u")  # type: ignore[arg-type]
     assert seen == {"s1": "token-1", "s2": "token-2"}
+
+
+def test_the_connections_list_reports_a_sheets_logins_gmail_link():
+    from app.api.v1.connections import ConnectionResponse
+
+    gmail_id = str(uuid.uuid4())
+    sheets = _conn("google_sheets", "a@x.com", 1, config={"gmail_connection_id": gmail_id})
+    sheets.scopes = "s"
+    out = ConnectionResponse.from_model(sheets, [])
+    assert out.gmail_connection_id == gmail_id

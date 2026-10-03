@@ -114,7 +114,7 @@ class ConnectionResponse(BaseModel):
     def from_model(
         cls, c: Connection, sources: list[DataSource], is_default: bool = False
     ) -> "ConnectionResponse":
-        cfg = (c.config or {}) if c.provider in ("slack", "notion") else {}
+        cfg = (c.config or {}) if c.provider in ("slack", "notion", "google_sheets") else {}
         return cls(
             id=c.id,
             is_default=is_default,
