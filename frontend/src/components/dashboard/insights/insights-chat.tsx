@@ -23,7 +23,7 @@ import { useGmailConnection, type GmailConnection } from "@/hooks/use-gmail-conn
 import { documentAsSource, useDocuments } from "@/hooks/use-documents";
 import { useNotionConnection, type NotionConnection } from "@/hooks/use-notion-connection";
 import { useSlackConnection, type SlackConnection } from "@/hooks/use-slack-connection";
-import { forGmail, forGmailOrAll } from "@/lib/gmail-link";
+import { forGmail } from "@/lib/gmail-link";
 import { sourceLabel, useGoogleSheetsConnection, type DataSource } from "@/hooks/use-google-sheets-connection";
 import {
   isEmailDraft,
@@ -657,10 +657,11 @@ export function InsightsChat() {
     gmailAccounts[0];
   const gmailAccountLabel = gmailAccounts.length > 1 ? (chatGmail?.external_account_email ?? null) : null;
 
-  // A NEW chat offers the sheets of the chosen Gmail's Google login (documents are always
-  // offered). If that Gmail owns no login, every sheet stays available. A saved chat keeps its own.
+  // A NEW chat offers only the sheets of the chosen Gmail's Google login (documents are always
+  // offered); a Gmail with no login shows no sheets. If no login is linked to any Gmail yet, all
+  // are shown. A saved chat keeps its own sheets.
   const pickerSources = useMemo(() => {
-    const logins = new Set(forGmailOrAll(sheetsAccounts, chatGmail?.id).map((a) => a.id));
+    const logins = new Set(forGmail(sheetsAccounts, chatGmail?.id).map((a) => a.id));
     return sources.filter((s) => !s.connection_id || logins.has(s.connection_id));
   }, [sources, sheetsAccounts, chatGmail?.id]);
 

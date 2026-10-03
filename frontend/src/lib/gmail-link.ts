@@ -8,13 +8,3 @@ export function forGmail<T extends { gmail_connection_id: string | null }>(
   if (!accounts.some((a) => a.gmail_connection_id)) return accounts;
   return accounts.filter((a) => gmailId != null && a.gmail_connection_id === gmailId);
 }
-
-/** Same idea for Google Sheets logins, but never empty: if the chosen Gmail owns none of them,
- * every login stays available, so the user's existing sheets can't disappear. */
-export function forGmailOrAll<T extends { gmail_connection_id: string | null }>(
-  accounts: T[],
-  gmailId: string | null | undefined
-): T[] {
-  const mine = forGmail(accounts, gmailId);
-  return mine.length > 0 ? mine : accounts;
-}
