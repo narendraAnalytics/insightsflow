@@ -87,15 +87,16 @@ def build_auth_url(
     *,
     scopes: list[str] | None = None,
     redirect_uri: str | None = None,
-    include_granted_scopes: bool = True,
+    include_granted_scopes: bool = False,
     prompt: str = "select_account consent",
 ) -> str:
     """Runs synchronously (no network call) — safe to call directly.
     `code_verifier` must be the same value passed to `exchange_code` for
     the same flow (see app/core/oauth_state.py for how it survives the
-    round trip to Google and back). Defaults are the Sheets flow; Gmail
-    passes its own scopes/redirect and turns `include_granted_scopes` off so
-    its token carries only Gmail's scope (a separate consent)."""
+    round trip to Google and back). Defaults are the Sheets flow. Both Sheets and
+    Gmail keep `include_granted_scopes` off so each token carries only its own scopes
+    (separate consents): with it on, an account that already granted Gmail gets Gmail
+    scopes back on a Sheets sign-in and oauthlib raises "Scope has changed"."""
     flow = _flow(scopes or SCOPES, redirect_uri or get_settings().google_redirect_uri)
     flow.code_verifier = code_verifier
     auth_kwargs: dict[str, str] = {}
