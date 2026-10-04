@@ -63,6 +63,7 @@ def test_missing_keys_raise_billing_not_configured(monkeypatch: pytest.MonkeyPat
 def test_prices_and_limits():
     assert credit_service.CONNECT_COST == 50
     assert credit_service.QUESTION_COST == 2
+    assert credit_service.AUTOMATION_COST == 5
     assert credit_service.MIN_TOPUP < credit_service.MAX_TOPUP
 
 

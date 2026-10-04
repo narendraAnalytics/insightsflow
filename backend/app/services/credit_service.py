@@ -27,6 +27,7 @@ logger = structlog.get_logger(__name__)
 # What things cost, in credits.
 CONNECT_COST = 50
 QUESTION_COST = 2
+AUTOMATION_COST = 5
 
 MIN_TOPUP = 10
 MAX_TOPUP = 10_000

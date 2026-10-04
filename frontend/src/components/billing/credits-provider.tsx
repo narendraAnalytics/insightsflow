@@ -7,13 +7,20 @@ import { apiFetch } from "@/lib/api";
 import { CREDITS_CHANGED_EVENT, CREDITS_NEEDED_EVENT } from "@/lib/credits-events";
 import { BuyCreditsDialog } from "@/components/billing/buy-credits-dialog";
 
-type Balance = { credits: number; connect_cost: number; question_cost: number; test_mode: boolean };
+type Balance = {
+  credits: number;
+  connect_cost: number;
+  question_cost: number;
+  automation_cost: number;
+  test_mode: boolean;
+};
 
 type CreditsContextValue = {
   /** null until the first load finishes. */
   credits: number | null;
   connectCost: number;
   questionCost: number;
+  automationCost: number;
   testMode: boolean;
   refresh: () => Promise<void>;
   openBuy: () => void;
@@ -72,6 +79,7 @@ export function CreditsProvider({ children }: { children: React.ReactNode }) {
       credits: balance?.credits ?? null,
       connectCost: balance?.connect_cost ?? 50,
       questionCost: balance?.question_cost ?? 2,
+      automationCost: balance?.automation_cost ?? 5,
       testMode: balance?.test_mode ?? false,
       refresh,
       openBuy,

@@ -287,7 +287,7 @@ async def start_manual_run(
 ) -> AutomationRun:
     """ "Run now": costs the same as a scheduled run, still ends at the approval step."""
     row = await _owned(session, clerk_user_id, automation_id)
-    await credit_service.require_credits(session, clerk_user_id, credit_service.QUESTION_COST)
+    await credit_service.require_credits(session, clerk_user_id, credit_service.AUTOMATION_COST)
     running = await session.scalar(
         select(func.count())
         .select_from(AutomationRun)
@@ -339,7 +339,7 @@ async def _execute(run_id: uuid.UUID) -> None:
             clerk = user.clerk_user_id
             conversation_id: uuid.UUID | None = None
             try:
-                await credit_service.require_credits(session, clerk, credit_service.QUESTION_COST)
+                await credit_service.require_credits(session, clerk, credit_service.AUTOMATION_COST)
                 ids = [uuid.UUID(i) for i in a.data_source_ids]
                 use_gmail = bool((a.delivery or {}).get("email"))
                 ctx = await insights_service.load_sheet_context(
@@ -355,7 +355,14 @@ async def _execute(run_id: uuid.UUID) -> None:
                 await session.commit()
                 error: str | None = None
                 async for chunk in insights_service.stream_answer(
-                    ctx, prompt, [], conversation_id, conversation.title, clerk
+                    ctx,
+                    prompt,
+                    [],
+                    conversation_id,
+                    conversation.title,
+                    clerk,
+                    cost=credit_service.AUTOMATION_COST,
+                    reason="automation_run",
                 ):
                     error = _final_event_error(chunk) or error
                 if error:

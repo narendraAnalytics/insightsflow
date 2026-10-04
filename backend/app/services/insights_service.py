@@ -374,7 +374,12 @@ def _tool_result_event(msg: ToolMessage) -> dict[str, Any]:
     }
 
 
-async def _charge_question(clerk_user_id: str, conversation_id: uuid.UUID) -> None:
+async def _charge_question(
+    clerk_user_id: str,
+    conversation_id: uuid.UUID,
+    cost: int = credit_service.QUESTION_COST,
+    reason: str = "ai_question",
+) -> None:
     """Debits the cost of one answer, only after it completed (failed runs are free).
     Own session, like _persist_assistant. /ask already checked the balance, so a
     failure here (a concurrent spend) just means this one answer went uncharged."""
@@ -384,8 +389,8 @@ async def _charge_question(clerk_user_id: str, conversation_id: uuid.UUID) -> No
             await credit_service.spend(
                 session,
                 user.id,
-                credit_service.QUESTION_COST,
-                "ai_question",
+                cost,
+                reason,
                 str(conversation_id),
             )
     except Exception:
@@ -424,6 +429,8 @@ async def stream_answer(
     conversation_id: uuid.UUID,
     title: str,
     clerk_user_id: str,
+    cost: int = credit_service.QUESTION_COST,
+    reason: str = "ai_question",
 ) -> AsyncIterator[str]:
     """Yields SSE-formatted strings: conversation, thinking, tool_start,
     tool_result, token, done, error. Whatever was streamed is saved to Neon
@@ -526,7 +533,7 @@ async def stream_answer(
             error = "I couldn't put an answer together. Please try asking again, a bit differently."
             yield _sse("error", {"code": "empty_answer", "message": error})
             return
-        await _charge_question(clerk_user_id, conversation_id)
+        await _charge_question(clerk_user_id, conversation_id, cost, reason)
         yield _sse("done", {})
     except TimeoutError:
         error = "That took too long. Try a simpler question."

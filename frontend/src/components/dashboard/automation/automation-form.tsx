@@ -154,7 +154,7 @@ export function AutomationForm({
   onSave: (input: AutomationInput, id: string | null) => Promise<void>;
   onPreview: (input: AutomationInput) => Promise<SchedulePreview>;
 }) {
-  const { questionCost } = useCredits();
+  const { automationCost } = useCredits();
   const [draft, setDraft] = useState<Draft>(() => blank(ctx));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -168,6 +168,14 @@ export function AutomationForm({
     setDraft(editing ? fromAutomation(editing) : { ...blank(ctx), ...(initial ?? {}) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editing, initial]);
+
+  // Gmail accounts can finish loading after the dialog opened; without a profile every delivery option is disabled.
+  useEffect(() => {
+    if (!open) return;
+    const fallback = ctx.gmailAccounts.find((g) => g.is_default) ?? ctx.gmailAccounts[0];
+    if (!fallback) return;
+    setDraft((d) => (d.gmail_connection_id ? d : { ...d, gmail_connection_id: fallback.id }));
+  }, [open, ctx.gmailAccounts]);
 
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((d) => ({ ...d, [key]: value }));
 
@@ -546,7 +554,7 @@ export function AutomationForm({
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-(--flow-cream)/80 px-6 py-4">
               <p className={`${Z} flex items-center gap-1.5 text-[20px] leading-none text-(--flow-ink)/65`}>
                 <Lightning weight="fill" className="size-4 text-(--flow-coral)" />
-                Each run uses {questionCost} credits
+                Each run uses {automationCost} credit{automationCost === 1 ? "" : "s"}
               </p>
               <div className="flex items-center gap-3">
                 {error && (

@@ -27,6 +27,7 @@ class BalanceResponse(BaseModel):
     credits: int
     connect_cost: int
     question_cost: int
+    automation_cost: int
     test_mode: bool
     entries: list[EntryOut]
 
@@ -61,6 +62,7 @@ async def balance(
         credits=await credit_service.get_balance(db, principal.user_id),
         connect_cost=credit_service.CONNECT_COST,
         question_cost=credit_service.QUESTION_COST,
+        automation_cost=credit_service.AUTOMATION_COST,
         test_mode=(get_settings().razorpay_key_id or "").startswith("rzp_test_"),
         entries=[
             EntryOut(delta=e.delta, reason=e.reason, created_at=e.created_at) for e in entries
