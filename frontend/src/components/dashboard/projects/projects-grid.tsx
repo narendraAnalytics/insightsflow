@@ -9,7 +9,11 @@ import { useCredits } from "@/components/billing/credits-provider";
 import { useGmailConnection } from "@/hooks/use-gmail-connection";
 import { useNotionConnection } from "@/hooks/use-notion-connection";
 import { useSlackConnection } from "@/hooks/use-slack-connection";
-import { sourceLabel, useGoogleSheetsConnection, type DataSource } from "@/hooks/use-google-sheets-connection";
+import { sourceLabel, useGoogleSheetsConnection, type DataSource, type GoogleSheetsConnection } from "@/hooks/use-google-sheets-connection";
+import type { GmailConnection } from "@/hooks/use-gmail-connection";
+import type { SlackConnection } from "@/hooks/use-slack-connection";
+import type { NotionConnection } from "@/hooks/use-notion-connection";
+import { forGmail } from "@/lib/gmail-link";
 
 const Z = "font-(family-name:--font-zeyada)";
 
@@ -49,53 +53,66 @@ function groupProjects(sources: DataSource[]): Project[] {
 }
 
 type AppChip = {
+  key: string;
   label: string;
   live: boolean;
-  Glyph?: (props: SVGProps<SVGSVGElement>) => ReactElement;
-  /** Shown after the label when not live ("not connected"). */
+  Glyph: (props: SVGProps<SVGSVGElement>) => ReactElement;
+  /** Account / workspace shown after the label, or "not linked" when not live. */
   note?: string;
 };
 
-/** The apps shown on a project. Google Sheets (the project's own source), Gmail, Slack and
- * Notion reflect the real connection state; nothing here is placeholder or invented.
+/** The apps one project works with, from the Gmail profile its Sheets login belongs to:
+ * that Gmail plus the Slack / Notion workspaces linked to it. Nothing here is invented.
  */
-function appChips(gmailConnected: boolean, slackConnected: boolean, notionConnected: boolean): AppChip[] {
-  return [
-    { label: "Google Sheets", live: true, Glyph: GoogleSheetsGlyph },
-    { label: "Gmail", live: gmailConnected, Glyph: GmailGlyph, note: "not connected" },
-    { label: "Slack", live: slackConnected, Glyph: SlackGlyph, note: "not connected" },
-    { label: "Notion", live: notionConnected, Glyph: NotionGlyph, note: "not connected" },
+function buildChips(
+  tabs: DataSource[],
+  sheetsAccounts: GoogleSheetsConnection[],
+  gmailAccounts: GmailConnection[],
+  slackAccounts: SlackConnection[],
+  notionAccounts: NotionConnection[]
+): AppChip[] {
+  const owner =
+    sheetsAccounts.find((a) => a.id === tabs[0].connection_id) ??
+    sheetsAccounts.find((a) => a.is_default) ??
+    sheetsAccounts[0];
+  const gmail = gmailAccounts.find((g) => g.id === owner?.gmail_connection_id);
+  const slack = forGmail(slackAccounts, gmail?.id);
+  const notion = forGmail(notionAccounts, gmail?.id);
+  const chips: AppChip[] = [
+    { key: "sheets", label: "Google Sheets", live: true, Glyph: GoogleSheetsGlyph, note: owner?.external_account_email ?? undefined },
+    gmail
+      ? { key: "gmail", label: "Gmail", live: true, Glyph: GmailGlyph, note: gmail.external_account_email ?? undefined }
+      : { key: "gmail", label: "Gmail", live: false, Glyph: GmailGlyph, note: "not linked" },
   ];
+  if (slack.length > 0) {
+    for (const w of slack)
+      chips.push({ key: `slack-${w.id}`, label: "Slack", live: true, Glyph: SlackGlyph, note: w.external_account_email ?? undefined });
+  } else {
+    chips.push({ key: "slack", label: "Slack", live: false, Glyph: SlackGlyph, note: "not linked" });
+  }
+  if (notion.length > 0) {
+    for (const w of notion)
+      chips.push({ key: `notion-${w.id}`, label: "Notion", live: true, Glyph: NotionGlyph, note: w.external_account_email ?? undefined });
+  } else {
+    chips.push({ key: "notion", label: "Notion", live: false, Glyph: NotionGlyph, note: "not linked" });
+  }
+  return chips;
 }
 
-function ConnectedAppsRow({
-  gmailConnected,
-  slackConnected,
-  notionConnected,
-}: {
-  gmailConnected: boolean;
-  slackConnected: boolean;
-  notionConnected: boolean;
-}) {
+function ConnectedAppsRow({ chips }: { chips: AppChip[] }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span className={`${Z} text-[20px] leading-none font-normal text-(--flow-ink)/70`}>Connected apps</span>
-      {appChips(gmailConnected, slackConnected, notionConnected).map((app) => (
+      {chips.map((app) => (
         <span
-          key={app.label}
-          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 ${Z} text-[19px] leading-none font-normal ${
-            app.live
-              ? "bg-(--flow-cyan)/20 text-(--flow-ink)"
-              : "bg-(--flow-ink)/6 text-(--flow-ink)/40"
+          key={app.key}
+          className={`inline-flex max-w-full items-center gap-1.5 rounded-full px-3 py-1 ${Z} text-[19px] leading-none font-normal ${
+            app.live ? "bg-(--flow-cyan)/20 text-(--flow-ink)" : "bg-(--flow-ink)/6 text-(--flow-ink)/40"
           }`}
         >
-          {app.Glyph ? (
-            <app.Glyph aria-hidden className={`size-4 shrink-0 ${app.live ? "" : "opacity-45 grayscale"}`} />
-          ) : (
-            app.live && <span className="size-1.5 rounded-full bg-(--flow-cyan)" />
-          )}
+          <app.Glyph aria-hidden className={`size-4 shrink-0 ${app.live ? "" : "opacity-45 grayscale"}`} />
           {app.label}
-          {!app.live && app.note && <span className="text-[15px]">· {app.note}</span>}
+          {app.note && <span className="truncate text-[15px]">· {app.note}</span>}
         </span>
       ))}
     </div>
@@ -106,16 +123,12 @@ function ProjectCard({
   project,
   accent,
   index,
-  gmailConnected,
-  slackConnected,
-  notionConnected,
+  chips,
 }: {
   project: Project;
   accent: string;
   index: number;
-  gmailConnected: boolean;
-  slackConnected: boolean;
-  notionConnected: boolean;
+  chips: AppChip[];
 }) {
   return (
     <motion.div
@@ -170,7 +183,7 @@ function ProjectCard({
         ))}
       </div>
 
-      <ConnectedAppsRow gmailConnected={gmailConnected} slackConnected={slackConnected} notionConnected={notionConnected} />
+      <ConnectedAppsRow chips={chips} />
 
       <div className="mt-1 flex flex-wrap items-center gap-3">
         <Link
@@ -203,8 +216,8 @@ type AppRow = {
   connected: boolean;
   /** Sheets connect is free (each sheet tab added costs credits); the others charge on connect. */
   costsOnConnect: boolean;
-  /** Account / workspace plus what it is set up to use, e.g. "Acme · #general". */
-  detail: string | null;
+  /** One line per connected account / workspace, e.g. "Acme · #general". */
+  details: string[];
   connect: () => Promise<void>;
   /** Connected apps that allow several accounts get a "+ Connect new" button (costs credits). */
   addAnother?: () => Promise<void>;
@@ -260,9 +273,13 @@ function AppsPanel({ apps }: { apps: AppRow[] }) {
               />
             </div>
             {app.connected ? (
-              <p className={`truncate ${Z} text-[20px] leading-snug font-normal text-(--flow-ink)/80`} title={app.detail ?? undefined}>
-                {app.detail ?? "Connected"}
-              </p>
+              <ul className="flex flex-col gap-0.5">
+                {(app.details.length > 0 ? app.details : ["Connected"]).map((d, i) => (
+                  <li key={i} className={`truncate ${Z} text-[20px] leading-snug font-normal text-(--flow-ink)/80`} title={d}>
+                    {d}
+                  </li>
+                ))}
+              </ul>
             ) : null}
             {app.connected && app.addAnother && (
               <button
@@ -322,6 +339,13 @@ export function ProjectsGrid() {
     notionConnected && { name: "Notion", Glyph: NotionGlyph },
   ].filter((a) => a !== false);
 
+  const gmailOf = (id: string | null) => gmailAccounts.find((g) => g.id === id)?.external_account_email;
+  const tagged = (line: string, gmailId: string | null) => {
+    const g = gmailOf(gmailId);
+    return g ? `${line} (${g})` : line;
+  };
+  const tabsOf = (id: string) => sources.filter((s) => s.connection_id === id).length;
+
   const apps: AppRow[] = [
     {
       key: "sheets",
@@ -329,13 +353,10 @@ export function ProjectsGrid() {
       Glyph: GoogleSheetsGlyph,
       connected: connection?.status === "connected",
       costsOnConnect: false,
-      detail: [
-        connection?.external_account_email,
-        sources.length > 0 ? `${sources.length} tab${sources.length === 1 ? "" : "s"}` : null,
-        sheetsAccounts.length > 1 && `+${sheetsAccounts.length - 1} more`,
-      ]
-        .filter(Boolean)
-        .join(" · "),
+      details: sheetsAccounts.map((a) => {
+        const n = sheetsAccounts.length === 1 ? sources.length : tabsOf(a.id);
+        return [a.external_account_email, `${n} tab${n === 1 ? "" : "s"}`].filter(Boolean).join(" · ");
+      }),
       connect: () => connectSheets(),
       addAnother: () => connectSheets(),
     },
@@ -345,11 +366,7 @@ export function ProjectsGrid() {
       Glyph: GmailGlyph,
       connected: gmailConnected,
       costsOnConnect: true,
-      detail: gmailConnection
-        ? `${gmailConnection.external_account_email ?? "Gmail"}${
-            gmailAccounts.length > 1 ? ` · +${gmailAccounts.length - 1} more` : ""
-          }`
-        : null,
+      details: gmailAccounts.map((g) => g.external_account_email ?? "Gmail"),
       connect: () => connectGmail(),
       addAnother: () => connectGmail(),
     },
@@ -359,14 +376,12 @@ export function ProjectsGrid() {
       Glyph: SlackGlyph,
       connected: slackConnected,
       costsOnConnect: true,
-      detail:
-        [
-          slackConnection?.external_account_email,
-          slackConnection?.slack_channel_name && `#${slackConnection.slack_channel_name}`,
-          slackAccounts.length > 1 && `+${slackAccounts.length - 1} more`,
-        ]
-          .filter(Boolean)
-          .join(" · "),
+      details: slackAccounts.map((w) =>
+        tagged(
+          [w.external_account_email, w.slack_channel_name && `#${w.slack_channel_name}`].filter(Boolean).join(" · "),
+          w.gmail_connection_id
+        )
+      ),
       connect: () => connectSlack(),
       addAnother: () => connectSlack(),
     },
@@ -376,13 +391,9 @@ export function ProjectsGrid() {
       Glyph: NotionGlyph,
       connected: notionConnected,
       costsOnConnect: true,
-      detail: [
-        notionConnection?.external_account_email,
-        notionConnection?.notion_page_title,
-        notionAccounts.length > 1 && `+${notionAccounts.length - 1} more`,
-      ]
-        .filter(Boolean)
-        .join(" · "),
+      details: notionAccounts.map((w) =>
+        tagged([w.external_account_email, w.notion_page_title].filter(Boolean).join(" · "), w.gmail_connection_id)
+      ),
       connect: () => connectNotion(),
       addAnother: () => connectNotion(),
     },
@@ -450,9 +461,7 @@ export function ProjectsGrid() {
           project={project}
           accent={accents[i % accents.length]}
           index={i}
-          gmailConnected={gmailConnected}
-          slackConnected={slackConnected}
-          notionConnected={notionConnected}
+          chips={buildChips(project.tabs, sheetsAccounts, gmailAccounts, slackAccounts, notionAccounts)}
         />
       ))}
       </div>
