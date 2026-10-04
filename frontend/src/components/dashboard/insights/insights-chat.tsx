@@ -18,6 +18,7 @@ import {
   WarningCircle,
 } from "@phosphor-icons/react";
 import NextLink from "next/link";
+import { useSearchParams } from "next/navigation";
 import { GmailGlyph, NotionGlyph, SlackGlyph } from "@/components/site/brand-icons";
 import { useGmailConnection, type GmailConnection } from "@/hooks/use-gmail-connection";
 import { documentAsSource, useDocuments } from "@/hooks/use-documents";
@@ -641,6 +642,16 @@ export function InsightsChat() {
     openConversation,
     removeConversation,
   } = useInsightsChat(ready, sources, gmailReady);
+
+  // `?chat=<id>` (from the Automation page's "Review & send") opens that saved chat once.
+  const searchParams = useSearchParams();
+  const requestedChat = searchParams.get("chat");
+  const openedRequested = useRef<string | null>(null);
+  useEffect(() => {
+    if (!requestedChat || openedRequested.current === requestedChat) return;
+    openedRequested.current = requestedChat;
+    void openConversation(requestedChat);
+  }, [requestedChat, openConversation]);
 
   // A new chat reads one specific account: keep the choice valid, defaulting to the user's
   // default account when it can be read, else the first readable one.

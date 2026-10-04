@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { InsightsChat } from "@/components/dashboard/insights/insights-chat";
 
 export default function AiInsightsPage() {
@@ -9,7 +10,9 @@ export default function AiInsightsPage() {
           Ask questions about your connected Google Sheet in plain language.
         </p>
       </div>
-      <InsightsChat />
+      <Suspense fallback={null}>
+        <InsightsChat />
+      </Suspense>
     </div>
   );
 }

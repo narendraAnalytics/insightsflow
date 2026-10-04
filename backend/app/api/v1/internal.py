@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from app.core.config import get_settings
 from app.core.errors import AppError
-from app.services import scheduled_email_service
+from app.services import automation_service, scheduled_email_service
 
 logger = structlog.get_logger(__name__)
 
@@ -49,4 +49,12 @@ async def run_due_emails(x_cron_secret: str | None = Header(default=None)) -> Ru
     result = await scheduled_email_service.run_due()
     if result["claimed"] or result["stale_failed"]:
         logger.info("email_run_due", **result)
+    # The same once-a-minute ping also starts any automation that is due. A failure here
+    # must never stop the email result from being reported.
+    try:
+        auto = await automation_service.run_due()
+        if auto["started"] or auto["stale_failed"]:
+            logger.info("automation_run_due", **auto)
+    except Exception:
+        logger.exception("automation_run_due_failed")
     return RunDueResponse(**result)

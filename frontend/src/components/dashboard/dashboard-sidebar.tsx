@@ -28,7 +28,7 @@ const navItems = [
   { label: "AI Insights", href: "/dashboard/ai-insights", icon: Robot, accent: "oklch(0.66 0.21 10)" },
   { label: "Team", href: null, icon: UsersThree, accent: "oklch(0.64 0.22 330)" },
   { label: "Documents", href: "/dashboard/documents", icon: FileText, accent: "var(--flow-coral)" },
-  { label: "Automation", href: null, icon: Lightning, accent: "oklch(0.78 0.16 80)" },
+  { label: "Automation", href: "/dashboard/automation", icon: Lightning, accent: "oklch(0.78 0.16 80)" },
   { label: "Analytics", href: null, icon: ChartBar, accent: "oklch(0.68 0.15 160)" },
   { label: "Settings", href: null, icon: Gear, accent: "oklch(0.66 0.14 25)" },
 ];
