@@ -468,6 +468,7 @@ async def stream_answer(
         ]
 
         yield _sse("thinking", {})
+        transcript: list[BaseMessage] = []
         async with asyncio.timeout(REQUEST_TIMEOUT_SECONDS):
             async for mode, payload in graph.astream(
                 {"messages": messages}, stream_mode=["messages", "updates"]
@@ -486,6 +487,7 @@ async def stream_answer(
                 else:
                     for node, update in payload.items():
                         for msg in update.get("messages", []):
+                            transcript.append(msg)
                             if node == "agent" and isinstance(msg, AIMessage):
                                 for call in msg.tool_calls:
                                     start = {
@@ -508,6 +510,22 @@ async def stream_answer(
                                             draft=result.get("draft"),
                                         )
                                 yield _sse("tool_result", result)
+            if not "".join(parts).strip() and not any(s.get("draft") for s in steps):
+                # The model ended on an empty message (reasoning ate the token budget, or it
+                # simply said nothing). Ask once more, without tools, for a final answer.
+                logger.warning("insights_empty_answer", conversation_id=str(conversation_id))
+                nudge = SystemMessage(
+                    content="Answer the user's question now, in plain words, using the tool "
+                    "results above. Do not call tools."
+                )
+                async for chunk in llm.astream([*messages, *transcript, nudge]):
+                    if isinstance(chunk.content, str) and chunk.content:
+                        parts.append(chunk.content)
+                        yield _sse("token", {"text": chunk.content})
+        if not "".join(parts).strip() and not any(s.get("draft") for s in steps):
+            error = "I couldn't put an answer together. Please try asking again, a bit differently."
+            yield _sse("error", {"code": "empty_answer", "message": error})
+            return
         await _charge_question(clerk_user_id, conversation_id)
         yield _sse("done", {})
     except TimeoutError:
