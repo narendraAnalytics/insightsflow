@@ -214,6 +214,7 @@ class ProviderDeliveryOut(BaseModel):
     kpis: list[DeliveryKpiOut]
     approval_rate: float | None
     waiting: int
+    scheduled: int
     daily: list[DeliveryDayOut]
     by_destination: list[CountOut]
     by_workspace: list[CountOut]
@@ -224,6 +225,7 @@ class DeliveryOut(BaseModel):
     range_days: Literal[7, 30, 90]
     slack: ProviderDeliveryOut
     notion: ProviderDeliveryOut
+    gmail: ProviderDeliveryOut
 
 
 @router.get("/delivery", response_model=DeliveryOut)

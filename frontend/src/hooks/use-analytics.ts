@@ -157,7 +157,7 @@ export function useSheetProfile(sourceId: string | null, query: SheetQuery) {
 
 // --- Slack and Notion delivery ------------------------------------------------------
 
-export type DeliveryProvider = "slack" | "notion";
+export type DeliveryProvider = "slack" | "notion" | "gmail";
 
 export type ProviderDelivery = {
   connected: boolean;
@@ -165,6 +165,7 @@ export type ProviderDelivery = {
   kpis: { key: string; value: number; previous: number; change_pct: number | null }[];
   approval_rate: number | null;
   waiting: number;
+  scheduled: number;
   daily: { date: string; drafted: number; sent: number }[];
   by_destination: { label: string; value: number }[];
   by_workspace: { label: string; value: number }[];
@@ -178,7 +179,12 @@ export type ProviderDelivery = {
   }[];
 };
 
-export type Delivery = { range_days: RangeDays; slack: ProviderDelivery; notion: ProviderDelivery };
+export type Delivery = {
+  range_days: RangeDays;
+  slack: ProviderDelivery;
+  notion: ProviderDelivery;
+  gmail: ProviderDelivery;
+};
 
 export function useDelivery(range: RangeDays) {
   const { isSignedIn, getToken } = useAuth();

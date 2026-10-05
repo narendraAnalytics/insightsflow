@@ -81,3 +81,37 @@ def test_recent_is_newest_first_with_clean_preview_and_notion_url():
 def test_nothing_drafted_means_no_rate_not_zero():
     s = svc.summarise("slack", [], TODAY, 30, [])
     assert s.approval_rate is None and s.waiting == 0 and not s.connected
+
+
+def email(created: datetime, status="sent", sent_at: datetime | None = None, to="a@x.com"):
+    draft = {"to": to, "subject": "Weekly numbers", "body": "hi", "status": status}
+    if sent_at:
+        draft["sent_at"] = sent_at.isoformat()
+    return svc.DraftRow(created, CONV, draft)
+
+
+def test_gmail_is_the_drafts_without_a_kind():
+    rows = [
+        email(utc(4), sent_at=utc(4)),
+        slack(utc(4), sent_at=utc(4)),
+        notion(utc(4), sent_at=utc(4)),
+    ]
+    g = svc.summarise("gmail", rows, TODAY, 7, [])
+    assert g.kpis[0].value == 1 and g.kpis[1].value == 1
+    assert g.recent[0].destination == "a@x.com" and g.recent[0].preview == "Weekly numbers"
+    # Slack and Notion never count the plain email draft.
+    assert svc.summarise("slack", rows, TODAY, 7, []).kpis[1].value == 1
+
+
+def test_gmail_scheduled_is_separate_from_waiting():
+    rows = [
+        email(utc(4), status="scheduled"),
+        email(utc(4), status="draft"),
+        email(utc(5), status="failed"),
+        # A scheduled mail that later went out carries no "from", so it is labelled.
+        email(utc(3), sent_at=utc(5)),
+    ]
+    g = svc.summarise("gmail", rows, TODAY, 7, [])
+    assert (g.scheduled, g.waiting) == (1, 2)
+    assert g.by_workspace[0].label == "Scheduled send"
+    assert g.approval_rate == 25.0

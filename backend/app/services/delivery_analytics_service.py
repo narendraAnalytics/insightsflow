@@ -25,7 +25,7 @@ from app.services import connection_service
 from app.services.analytics_service import normalise_range, pct_change, window_days
 from app.services.dashboard_service import IST
 
-PROVIDERS = ("slack", "notion")
+PROVIDERS = ("slack", "notion", "gmail")
 TOP_DESTINATIONS = 8
 RECENT_LIMIT = 8
 PREVIEW_CHARS = 90
@@ -76,6 +76,7 @@ class ProviderStats:
     kpis: list[Kpi]
     approval_rate: float | None  # sent / drafted in the window, in percent
     waiting: int  # drafts still waiting for the user's approval (or failed)
+    scheduled: int  # approved emails still waiting for their send time (Gmail only)
     daily: list[DayPoint]
     by_destination: list[Count]
     by_workspace: list[Count]
@@ -100,6 +101,8 @@ def _ist_date(value: datetime | str | None) -> date | None:
 
 
 def _destination(kind: str, draft: dict[str, Any]) -> str:
+    if kind == "gmail":
+        return str(draft.get("to") or "Unknown recipient")
     if kind == "slack":
         name = str(draft.get("channel_name") or "")
         return f"#{name}" if name else "Slack"
@@ -107,7 +110,8 @@ def _destination(kind: str, draft: dict[str, Any]) -> str:
 
 
 def _preview(kind: str, draft: dict[str, Any]) -> str:
-    text = str(draft.get("title") if kind == "notion" else draft.get("text") or "").strip()
+    field = {"notion": "title", "gmail": "subject"}.get(kind, "text")
+    text = str(draft.get(field) or "").strip()
     text = " ".join(text.split())
     return text if len(text) <= PREVIEW_CHARS else text[: PREVIEW_CHARS - 1] + "…"
 
@@ -127,16 +131,17 @@ def summarise(
     previous = window_days(current[0] - timedelta(days=1), days)
     cur_set, prev_set = set(current), set(previous)
 
-    drafted_cur = drafted_prev = sent_cur = sent_prev = waiting = 0
+    drafted_cur = drafted_prev = sent_cur = sent_prev = waiting = scheduled = 0
     drafted_by_day: dict[date, int] = {}
     sent_by_day: dict[date, int] = {}
     destinations: dict[str, int] = {}
     workspaces: dict[str, int] = {}
     sent_items: list[tuple[str, SentItem]] = []
     sent_of_drafted_cur = 0
+    fallback_ws = "Scheduled send" if kind == "gmail" else "Unknown workspace"
 
     for row in rows:
-        if row.draft.get("kind") != kind:
+        if (row.draft.get("kind") or "gmail") != kind:
             continue
         made = _ist_date(row.created_at)
         status = row.draft.get("status")
@@ -145,6 +150,8 @@ def summarise(
             drafted_by_day[made] = drafted_by_day.get(made, 0) + 1
             if status == "sent":
                 sent_of_drafted_cur += 1
+            elif status == "scheduled":
+                scheduled += 1
             elif status in (None, "draft", "failed"):
                 waiting += 1
         elif made in prev_set:
@@ -161,7 +168,7 @@ def summarise(
         sent_by_day[sent_on] = sent_by_day.get(sent_on, 0) + 1
         dest = _destination(kind, row.draft)
         destinations[dest] = destinations.get(dest, 0) + 1
-        ws = str(row.draft.get("workspace") or "Unknown workspace")
+        ws = str(row.draft.get("workspace") or row.draft.get("from") or fallback_ws)
         workspaces[ws] = workspaces.get(ws, 0) + 1
         sent_items.append(
             (
@@ -191,11 +198,23 @@ def summarise(
         ],
         approval_rate=_ratio(sent_of_drafted_cur, drafted_cur),
         waiting=waiting,
+        scheduled=scheduled,
         daily=[DayPoint(str(d), drafted_by_day.get(d, 0), sent_by_day.get(d, 0)) for d in current],
         by_destination=top(destinations),
         by_workspace=top(workspaces),
         recent=[item for _, item in sent_items[:RECENT_LIMIT]],
     )
+
+
+def _connection_detail(c: Connection, cfg: dict[str, Any]) -> str | None:
+    """The second line of a connected account: Slack's channel, Notion's page, or what
+    a Gmail account is allowed to do."""
+    if c.provider == "slack":
+        name = cfg.get("channel_name")
+        return f"#{name}" if name else None
+    if c.provider == "gmail":
+        return "Can read and send" if "gmail.readonly" in (c.scopes or "") else "Send only"
+    return cfg.get("page_title") or None
 
 
 def _workspaces(connections: list[Connection]) -> dict[str, list[Workspace]]:
@@ -204,9 +223,7 @@ def _workspaces(connections: list[Connection]) -> dict[str, list[Workspace]]:
         if c.provider not in out or c.status != "connected":
             continue
         cfg = c.config or {}
-        destination = cfg.get("channel_name") if c.provider == "slack" else cfg.get("page_title")
-        if c.provider == "slack" and destination:
-            destination = f"#{destination}"
+        destination = _connection_detail(c, cfg)
         out[c.provider].append(
             Workspace(
                 name=c.external_account_email or "Workspace",

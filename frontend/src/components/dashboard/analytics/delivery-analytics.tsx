@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { ArrowDownRight, ArrowUpRight, CheckCircle, Clock, PaperPlaneTilt, Percent } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
-import { NotionGlyph, SlackGlyph } from "@/components/site/brand-icons";
+import { GmailGlyph, NotionGlyph, SlackGlyph } from "@/components/site/brand-icons";
 import { useDelivery, type DeliveryProvider, type ProviderDelivery, type RangeDays } from "@/hooks/use-analytics";
 
 const RANGES: { value: RangeDays; label: string }[] = [
@@ -21,6 +21,13 @@ const META: Record<DeliveryProvider, { name: string; verb: string; sentLabel: st
     sentLabel: "Messages posted",
     destLabel: "Top channels",
     accent: "var(--flow-coral)",
+  },
+  gmail: {
+    name: "Gmail",
+    verb: "sent",
+    sentLabel: "Emails sent",
+    destLabel: "Top recipients",
+    accent: "var(--flow-magenta)",
   },
   notion: {
     name: "Notion",
@@ -181,7 +188,13 @@ function ProviderView({ provider, d }: { provider: DeliveryProvider; d: Provider
           icon={Clock}
           label="Waiting for you"
           value={num(d.waiting)}
-          note={d.waiting === 0 ? "Nothing pending" : "drafts not yet approved"}
+          note={
+            d.scheduled > 0
+              ? `${d.scheduled} scheduled to send`
+              : d.waiting === 0
+                ? "Nothing pending"
+                : "drafts not yet approved"
+          }
         />
       </div>
 
@@ -241,7 +254,7 @@ function ProviderView({ provider, d }: { provider: DeliveryProvider; d: Provider
             <Hint text={`Nothing ${m.verb} in this period.`} />
           )}
         </Card>
-        <Card title="Connected workspaces">
+        <Card title={provider === "gmail" ? "Connected accounts" : "Connected workspaces"}>
           {d.workspaces.length ? (
             <ul className="flex flex-col divide-y divide-(--flow-ink)/8">
               {d.workspaces.map((w) => {
@@ -258,7 +271,7 @@ function ProviderView({ provider, d }: { provider: DeliveryProvider; d: Provider
                         )}
                       </span>
                       <span className="block truncate text-xs text-(--flow-ink)/55">
-                        {w.destination ?? `No ${provider === "slack" ? "channel" : "page"} chosen`}
+                        {w.destination ?? (provider === "slack" ? "No channel chosen" : provider === "notion" ? "No page chosen" : "Connected")}
                       </span>
                     </span>
                     <span className="shrink-0 text-xs text-(--flow-ink)/65 tabular-nums">
@@ -269,7 +282,7 @@ function ProviderView({ provider, d }: { provider: DeliveryProvider; d: Provider
               })}
             </ul>
           ) : (
-            <Hint text={`No ${m.name} workspace is connected right now.`} />
+            <Hint text={`No ${m.name} ${provider === "gmail" ? "account" : "workspace"} is connected right now.`} />
           )}
         </Card>
       </div>
@@ -312,7 +325,7 @@ function ProviderView({ provider, d }: { provider: DeliveryProvider; d: Provider
 export function DeliveryAnalytics({ provider }: { provider: DeliveryProvider }) {
   const [range, setRange] = useState<RangeDays>(30);
   const { data, error, isLoading } = useDelivery(range);
-  const Glyph = provider === "slack" ? SlackGlyph : NotionGlyph;
+  const Glyph = { slack: SlackGlyph, notion: NotionGlyph, gmail: GmailGlyph }[provider];
 
   return (
     <div className="flex flex-col gap-5">

@@ -381,6 +381,7 @@ const TABS = [
   { id: "sheets", label: "Connected sheets" },
   { id: "slack", label: "Slack" },
   { id: "notion", label: "Notion" },
+  { id: "gmail", label: "Gmail" },
 ] as const;
 
 export function AnalyticsView() {
