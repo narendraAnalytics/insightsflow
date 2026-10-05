@@ -154,3 +154,57 @@ export function useSheetProfile(sourceId: string | null, query: SheetQuery) {
 
   return { profile, error, isLoading: wanted !== null && doneFor !== wanted };
 }
+
+// --- Slack and Notion delivery ------------------------------------------------------
+
+export type DeliveryProvider = "slack" | "notion";
+
+export type ProviderDelivery = {
+  connected: boolean;
+  workspaces: { name: string; destination: string | null; is_default: boolean }[];
+  kpis: { key: string; value: number; previous: number; change_pct: number | null }[];
+  approval_rate: number | null;
+  waiting: number;
+  daily: { date: string; drafted: number; sent: number }[];
+  by_destination: { label: string; value: number }[];
+  by_workspace: { label: string; value: number }[];
+  recent: {
+    preview: string;
+    destination: string;
+    workspace: string;
+    sent_at: string;
+    url: string | null;
+    conversation_id: string;
+  }[];
+};
+
+export type Delivery = { range_days: RangeDays; slack: ProviderDelivery; notion: ProviderDelivery };
+
+export function useDelivery(range: RangeDays) {
+  const { isSignedIn, getToken } = useAuth();
+  const [data, setData] = useState<Delivery | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loadedFor, setLoadedFor] = useState<RangeDays | null>(null);
+
+  useEffect(() => {
+    if (!isSignedIn) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiFetch<Delivery>(`/api/v1/analytics/delivery?range=${range}`, await getToken());
+        if (cancelled) return;
+        setData(res);
+        setError(null);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load delivery analytics");
+      } finally {
+        if (!cancelled) setLoadedFor(range);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isSignedIn, getToken, range]);
+
+  return { data, error, isLoading: loadedFor !== range };
+}

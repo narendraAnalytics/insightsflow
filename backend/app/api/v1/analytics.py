@@ -12,7 +12,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import Principal, get_current_principal
 from app.db.session import get_db
-from app.services import analytics_service, data_source_service, sheet_analytics_service
+from app.services import (
+    analytics_service,
+    data_source_service,
+    delivery_analytics_service,
+    sheet_analytics_service,
+)
 from app.services.connection_service import get_or_create_user
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -164,4 +169,72 @@ async def sheet_profile(
         ),
         truncated=truncated,
         **asdict(profile),
+    )
+
+
+# --- Slack and Notion delivery ----------------------------------------------------------
+
+
+class DeliveryKpiOut(BaseModel):
+    key: str
+    value: int
+    previous: int
+    change_pct: float | None
+
+
+class DeliveryDayOut(BaseModel):
+    date: str
+    drafted: int
+    sent: int
+
+
+class CountOut(BaseModel):
+    label: str
+    value: int
+
+
+class SentItemOut(BaseModel):
+    preview: str
+    destination: str
+    workspace: str
+    sent_at: str
+    url: str | None
+    conversation_id: uuid.UUID
+
+
+class WorkspaceOut(BaseModel):
+    name: str
+    destination: str | None
+    is_default: bool
+
+
+class ProviderDeliveryOut(BaseModel):
+    connected: bool
+    workspaces: list[WorkspaceOut]
+    kpis: list[DeliveryKpiOut]
+    approval_rate: float | None
+    waiting: int
+    daily: list[DeliveryDayOut]
+    by_destination: list[CountOut]
+    by_workspace: list[CountOut]
+    recent: list[SentItemOut]
+
+
+class DeliveryOut(BaseModel):
+    range_days: Literal[7, 30, 90]
+    slack: ProviderDeliveryOut
+    notion: ProviderDeliveryOut
+
+
+@router.get("/delivery", response_model=DeliveryOut)
+async def delivery(
+    range_days: int = Query(analytics_service.DEFAULT_RANGE, alias="range", ge=1, le=365),
+    principal: Principal = Depends(get_current_principal),
+    db: AsyncSession = Depends(get_db),
+) -> DeliveryOut:
+    """What was drafted vs approved-and-sent to Slack and Notion, from the draft cards."""
+    user = await get_or_create_user(db, principal.user_id)
+    days, stats = await delivery_analytics_service.get_delivery(db, user.id, range_days)
+    return DeliveryOut.model_validate(
+        {"range_days": days, **{k: asdict(v) for k, v in stats.items()}}
     )

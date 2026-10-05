@@ -15,6 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAnalytics, type Analytics, type RangeDays } from "@/hooks/use-analytics";
 import { SheetsAnalytics } from "@/components/dashboard/analytics/sheets-analytics";
+import { DeliveryAnalytics } from "@/components/dashboard/analytics/delivery-analytics";
 
 const RANGES: { value: RangeDays; label: string }[] = [
   { value: 7, label: "7 days" },
@@ -378,13 +379,15 @@ function UsageView() {
 const TABS = [
   { id: "usage", label: "Usage" },
   { id: "sheets", label: "Connected sheets" },
+  { id: "slack", label: "Slack" },
+  { id: "notion", label: "Notion" },
 ] as const;
 
 export function AnalyticsView() {
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("usage");
   return (
     <div className="flex flex-col gap-5">
-      <div role="tablist" aria-label="Analytics" className="glass-panel inline-flex self-start rounded-full p-1">
+      <div role="tablist" aria-label="Analytics" className="glass-panel inline-flex max-w-full self-start overflow-x-auto rounded-full p-1">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -401,7 +404,13 @@ export function AnalyticsView() {
           </button>
         ))}
       </div>
-      {tab === "usage" ? <UsageView /> : <SheetsAnalytics />}
+      {tab === "usage" ? (
+        <UsageView />
+      ) : tab === "sheets" ? (
+        <SheetsAnalytics />
+      ) : (
+        <DeliveryAnalytics provider={tab} />
+      )}
     </div>
   );
 }
