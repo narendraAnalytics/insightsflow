@@ -125,6 +125,10 @@
   --flow-coral-300: oklch(0.82 0.11 35);
   --flow-coral-700: oklch(0.55 0.16 32);
   --flow-shell: oklch(0.985 0.012 70); /* raised surface, a touch lighter than cream */
+  /* "Mint lagoon" panel for the #product section (2026-10-05): bright, cool-leaning but never blue. */
+  --flow-lagoon: oklch(0.83 0.13 172);
+  --flow-aqua: oklch(0.89 0.09 190);
+  --flow-lemon: oklch(0.95 0.12 105);
 
   --surface: var(--flow-cream);
   --surface-raised: var(--flow-shell);
