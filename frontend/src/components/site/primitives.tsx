@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, type ReactNode } from "react";
-import { motion, useReducedMotion, useSpring } from "framer-motion";
+import { motion, useReducedMotion, useScroll, useSpring, useTransform, type MotionValue } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { EASE_OUT } from "@/lib/motion";
 
@@ -59,6 +59,48 @@ export function RevealHeading({
         </span>
       ))}
     </Tag>
+  );
+}
+
+function FillWord({ progress, range, className, children }: { progress: MotionValue<number>; range: [number, number]; className?: string; children: string }) {
+  const opacity = useTransform(progress, range, [0.16, 1]);
+  return (
+    <motion.span style={{ opacity }} className={cn("inline-block", className)}>
+      {children}
+    </motion.span>
+  );
+}
+
+/**
+ * Headline whose words fill from faint to solid as it scrolls up the screen
+ * (and empty again on the way back). Full text is in aria-label; words are aria-hidden.
+ */
+export function ScrubHeading({ lines, className }: { lines: Line[]; className?: string }) {
+  const ref = useRef<HTMLHeadingElement>(null);
+  const reduced = useReducedMotion() ?? false;
+  const { scrollYProgress } = useScroll({ target: ref, offset: ["start 0.92", "start 0.4"] });
+  const words = lines.flatMap((line, li) => line.text.split(" ").map((w) => ({ w, li, className: line.className })));
+  const n = words.length;
+  return (
+    <h2 ref={ref} aria-label={lines.map((l) => l.text).join(" ")} className={className}>
+      {lines.map((_, li) => (
+        <span key={li} aria-hidden="true" className="block">
+          {words.map((word, i) =>
+            word.li !== li ? null : (
+              <span key={i}>
+                {reduced ? (
+                  <span className={cn("inline-block", word.className)}>{word.w}</span>
+                ) : (
+                  <FillWord progress={scrollYProgress} range={[i / n, Math.min(1, (i + 1.6) / n)]} className={word.className}>
+                    {word.w}
+                  </FillWord>
+                )}{" "}
+              </span>
+            )
+          )}
+        </span>
+      ))}
+    </h2>
   );
 }
 

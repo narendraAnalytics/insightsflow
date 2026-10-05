@@ -1,57 +1,58 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion, useReducedMotion, useScroll, useSpring } from "framer-motion";
+import { AnimatePresence, motion, useInView, useMotionValueEvent, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import { ChatCircleText, Check, CheckCircle, Hourglass, NotePencil, PaperPlaneTilt, PlugsConnected } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { EASE_OUT } from "@/lib/motion";
-import { GoogleSheetsGlyph, NotionGlyph, SlackGlyph } from "@/components/site/brand-icons";
-import { RevealHeading } from "@/components/site/primitives";
+import { GmailGlyph, GoogleSheetsGlyph, NotionGlyph, SlackGlyph } from "@/components/site/brand-icons";
+import { ScrubHeading } from "@/components/site/primitives";
 
 const steps = [
   {
     key: "connect",
     icon: PlugsConnected,
     accent: "var(--flow-mint)",
+    tint: "var(--flow-mint)",
     title: "Connect a sheet",
     body: "Sign in with Google and pick a spreadsheet in Google's own picker. Choose the tabs you care about. Add more sheets any time.",
-    live: true,
   },
   {
     key: "ask",
     icon: ChatCircleText,
     accent: "var(--flow-magenta)",
+    tint: "var(--flow-pink)",
     title: "Ask in plain words",
     body: "Sarvam-105B works out which steps answer your question. pandas runs each one on your real rows, and the answer streams back with the figures it used.",
-    live: true,
   },
   {
     key: "draft",
     icon: NotePencil,
     accent: "var(--flow-coral)",
+    tint: "var(--flow-aqua)",
     title: "Get a draft report",
     body: "The findings are written up as a short report with the key numbers spelled out, ready for a person to read.",
-    live: true,
   },
   {
     key: "approve",
     icon: CheckCircle,
-    accent: "var(--flow-amber)",
+    accent: "var(--flow-coral-700)",
+    tint: "var(--flow-lemon)",
     title: "Approve it",
     body: "Read the draft, then approve it or send it back. Until you approve, nothing is written or posted anywhere.",
-    live: true,
   },
   {
     key: "deliver",
     icon: PaperPlaneTilt,
-    accent: "var(--flow-pink)",
+    accent: "var(--flow-magenta)",
+    tint: "var(--flow-coral-300)",
     title: "Deliver to your team",
-    body: "The approved report is saved to Notion and a summary goes to the right Slack channel.",
-    live: true,
+    body: "The approved report is saved to Notion, a summary goes to the right Slack channel, or it's emailed from your Gmail.",
   },
 ] as const;
 
 type StepKey = (typeof steps)[number]["key"];
+const N = steps.length;
 
 function StepVisual({ step }: { step: StepKey }) {
   const reduced = useReducedMotion();
@@ -131,7 +132,7 @@ function StepVisual({ step }: { step: StepKey }) {
     case "approve":
       return (
         <div className="flex flex-col gap-3">
-          <motion.div {...pop(0)} className="flex items-center gap-2 rounded-2xl bg-(--flow-amber)/25 px-4 py-3 text-[14px] font-semibold text-(--flow-ink)">
+          <motion.div {...pop(0)} className="flex items-center gap-2 rounded-2xl bg-(--flow-amber)/30 px-4 py-3 text-[14px] font-semibold text-(--flow-ink)">
             <Hourglass weight="fill" className="size-4 text-(--flow-coral-700)" />
             Waiting for Priya (Finance) to approve
           </motion.div>
@@ -151,15 +152,15 @@ function StepVisual({ step }: { step: StepKey }) {
       );
     case "deliver":
       return (
-        <div className="flex flex-col gap-3">
-          <motion.div {...pop(0)} className="flex items-center gap-3 rounded-2xl bg-(--flow-shell) p-4 shadow-(--shadow-sm)">
-            <NotionGlyph className="size-7" />
+        <div className="flex flex-col gap-2.5">
+          <motion.div {...pop(0)} className="flex items-center gap-3 rounded-2xl bg-(--flow-shell) p-3.5 shadow-(--shadow-sm)">
+            <NotionGlyph className="size-7 shrink-0" />
             <div>
               <p className="text-[14.5px] font-semibold text-(--flow-ink)">Saved to Reports</p>
               <p className="text-[12.5px] text-(--text-muted)">South, September review</p>
             </div>
           </motion.div>
-          <motion.div {...pop(0.2)} className="flex gap-3 rounded-2xl bg-(--flow-shell) p-4 shadow-(--shadow-sm)">
+          <motion.div {...pop(0.18)} className="flex gap-3 rounded-2xl bg-(--flow-shell) p-3.5 shadow-(--shadow-sm)">
             <SlackGlyph className="size-7 shrink-0" />
             <div>
               <p className="text-[14px] font-semibold text-(--flow-ink)">#south-sales</p>
@@ -168,196 +169,234 @@ function StepVisual({ step }: { step: StepKey }) {
               </p>
             </div>
           </motion.div>
+          <motion.div {...pop(0.36)} className="flex items-center gap-3 rounded-2xl bg-(--flow-shell) p-3.5 shadow-(--shadow-sm)">
+            <GmailGlyph className="size-7 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-[14.5px] font-semibold text-(--flow-ink)">Emailed to the regional heads</p>
+              <p className="truncate text-[12.5px] text-(--text-muted)">Subject: South, September review</p>
+            </div>
+          </motion.div>
         </div>
       );
   }
 }
 
-/** Wavy rail drawn in pixel space (so particles stay round), with travelling particles. */
-function FlowRail({ progress, reduced }: { progress: ReturnType<typeof useSpring>; reduced: boolean }) {
+/** Mounts the demo hidden, then remounts it (replaying its entrance) when the card reaches the screen. */
+function PlayOnView({ step }: { step: StepKey }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [h, setH] = useState(0);
+  const inView = useInView(ref, { once: true, amount: 0.5 });
+  const reduced = useReducedMotion();
+  const live = inView || reduced;
+  return (
+    <div ref={ref} style={{ visibility: live ? "visible" : "hidden" }}>
+      <StepVisual key={live ? "live" : "idle"} step={step} />
+    </div>
+  );
+}
+
+const tintBg = (tint: string) =>
+  `linear-gradient(160deg, color-mix(in oklab, ${tint} 48%, var(--flow-shell)) 0%, color-mix(in oklab, ${tint} 20%, var(--flow-shell)) 75%)`;
+
+function StepCopy({ index, big }: { index: number; big?: boolean }) {
+  const step = steps[index];
+  const Icon = step.icon;
+  return (
+    <div>
+      <div className="flex items-center gap-4">
+        <span
+          aria-hidden="true"
+          className={cn(
+            "font-display leading-[0.8] text-transparent [-webkit-text-stroke:2px_color-mix(in_oklab,var(--flow-ink)_45%,transparent)]",
+            big ? "text-[clamp(4.5rem,7vw,6.5rem)]" : "text-[4rem]"
+          )}
+        >
+          {String(index + 1).padStart(2, "0")}
+        </span>
+        <span className="flex flex-col gap-1.5">
+          <span className="tabular text-[13px] font-bold text-(--text-muted)">
+            Step {index + 1} of {N}
+          </span>
+          <span className="w-fit rounded-full bg-(--flow-mint) px-2.5 py-0.5 text-[11.5px] font-bold text-(--flow-ink)">Live now</span>
+        </span>
+      </div>
+      <h3 className="font-display mt-5 flex items-center gap-3 text-[clamp(2rem,3.2vw,2.8rem)] leading-none text-(--flow-ink)">
+        <Icon weight="duotone" className="size-9 shrink-0" style={{ color: step.accent }} />
+        {step.title}
+      </h3>
+      <p className="mt-4 max-w-[42ch] text-[16px] leading-relaxed text-(--text-secondary) sm:text-[17px]">{step.body}</p>
+    </div>
+  );
+}
+
+const STRIP = 76; // collapsed panel width, px
+const GAP = 12;
+
+/**
+ * Desktop: five panels side by side, pinned while the track scrolls past. The active step's panel
+ * widens (flex-grow) to show its copy and demo; the rest are slim strips with a big number and a
+ * rotated title. Visual only (aria-hidden): the phone list below doubles as the screen-reader version.
+ */
+function PanelDeck({ reduced }: { reduced: boolean }) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const rowRef = useRef<HTMLOListElement>(null);
+  const [active, setActive] = useState(0);
+  const [rowWidth, setRowWidth] = useState(0);
+
+  const { scrollYProgress } = useScroll({ target: trackRef, offset: ["start start", "end end"] });
+  useMotionValueEvent(scrollYProgress, "change", (v) => {
+    const i = Math.max(0, Math.min(N - 1, Math.floor(v * N)));
+    setActive((a) => (a === i ? a : i));
+  });
+  // 0..1 progress inside the active step
+  const fill = useTransform(scrollYProgress, (v) => {
+    const x = v * N;
+    return Math.max(0, Math.min(1, x - Math.min(N - 1, Math.floor(x))));
+  });
+
   useEffect(() => {
-    const el = ref.current;
+    const el = rowRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(([entry]) => setH(entry.contentRect.height));
+    const ro = new ResizeObserver(([entry]) => setRowWidth(entry.contentRect.width));
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+  // the open panel's final width; content is laid out at this width from the start so text never re-wraps mid-animation
+  const openWidth = Math.max(0, rowWidth - (N - 1) * (STRIP + GAP));
 
-  const segs = 8;
-  let d = "M12,0";
-  for (let i = 0; i < segs; i++) {
-    const y0 = (h / segs) * i;
-    const y1 = (h / segs) * (i + 1);
-    const dx = i % 2 === 0 ? 20 : 4;
-    d += ` C${dx},${y0 + (y1 - y0) * 0.35} ${dx},${y0 + (y1 - y0) * 0.65} 12,${y1}`;
-  }
+  const goTo = (i: number) => {
+    const el = trackRef.current;
+    if (!el) return;
+    const top = el.getBoundingClientRect().top + window.scrollY;
+    window.scrollTo({ top: top + ((i + 0.5) / N) * (el.offsetHeight - window.innerHeight), behavior: reduced ? "auto" : "smooth" });
+  };
 
   return (
-    <div ref={ref} aria-hidden="true" className="absolute top-0 bottom-0 left-0 w-6">
-      {h > 0 && (
-        <svg width="24" height={h} className="absolute inset-0 overflow-visible">
-          <defs>
-            <linearGradient id="rail-grad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--flow-mint)" />
-              <stop offset="35%" stopColor="var(--flow-magenta)" />
-              <stop offset="70%" stopColor="var(--flow-coral)" />
-              <stop offset="100%" stopColor="var(--flow-amber)" />
-            </linearGradient>
-          </defs>
-          <path d={d} fill="none" stroke="var(--flow-ink)" strokeOpacity={0.1} strokeWidth={2} />
-          {!reduced && (
-            <>
-              <circle r="4" fill="var(--flow-magenta)" style={{ filter: "drop-shadow(0 0 6px var(--flow-magenta))" }}>
-                <animateMotion dur="7s" repeatCount="indefinite" path={d} />
-              </circle>
-              <circle r="3" fill="var(--flow-amber)">
-                <animateMotion dur="7s" begin="-3.5s" repeatCount="indefinite" path={d} />
-              </circle>
-            </>
-          )}
-        </svg>
-      )}
-      {/* scroll-scrubbed fill: scaleY overlay (pathLength bound to scroll is unreliable in this repo) */}
-      <motion.div
-        style={{ scaleY: progress }}
-        className="absolute top-0 left-[11px] h-full w-[2px] origin-top rounded-full bg-[linear-gradient(var(--flow-mint),var(--flow-magenta),var(--flow-coral),var(--flow-amber))]"
-      />
+    <div ref={trackRef} aria-hidden="true" className="relative mt-14 hidden h-[460svh] lg:block">
+      <div className="sticky top-0 flex h-svh items-center">
+        <ol ref={rowRef} className="flex h-[min(78svh,38rem)] w-full" style={{ gap: GAP }}>
+          {steps.map((step, i) => {
+            const on = i === active;
+            const Icon = step.icon;
+            return (
+              <motion.li
+                key={step.key}
+                initial={false}
+                animate={{ flexGrow: on ? 1 : 0 }}
+                transition={reduced ? { duration: 0 } : { duration: 0.8, ease: EASE_OUT }}
+                style={{ flexBasis: STRIP, flexShrink: 0 }}
+                className="lux-card relative isolate min-w-0 overflow-hidden rounded-[28px]"
+              >
+                <span className="absolute inset-0 -z-10" style={{ background: tintBg(step.tint) }} />
+                <span className="absolute -right-20 -bottom-24 -z-10 size-72 rounded-full opacity-60 blur-3xl" style={{ background: step.tint }} />
+
+                {/* collapsed face: number, rotated title, icon. Clicking jumps the scroll to that step. */}
+                <motion.button
+                  type="button"
+                  tabIndex={-1}
+                  onClick={() => goTo(i)}
+                  animate={{ opacity: on ? 0 : 1 }}
+                  transition={{ duration: on ? 0.15 : 0.4, delay: on ? 0 : 0.35 }}
+                  style={{ width: STRIP, pointerEvents: on ? "none" : "auto" }}
+                  className="group absolute inset-y-0 left-0 flex flex-col items-center justify-between py-6"
+                >
+                  <span className="font-display text-[30px] leading-none text-(--flow-ink)">{String(i + 1).padStart(2, "0")}</span>
+                  <span className="font-display rotate-180 text-[22px] leading-none whitespace-nowrap text-(--flow-ink)/80 transition-colors [writing-mode:vertical-rl] group-hover:text-(--flow-ink)">
+                    {step.title}
+                  </span>
+                  <Icon weight="duotone" className="size-6 transition-transform duration-300 group-hover:scale-110" style={{ color: step.accent }} />
+                </motion.button>
+
+                {/* open face */}
+                <AnimatePresence>
+                  {on && (
+                    <motion.div
+                      key="open"
+                      initial={reduced ? false : { opacity: 0, x: 28 }}
+                      animate={{ opacity: 1, x: 0, transition: { delay: reduced ? 0 : 0.3, duration: 0.55, ease: EASE_OUT } }}
+                      exit={{ opacity: 0, transition: { duration: 0.15 } }}
+                      style={{ width: openWidth }}
+                      className="absolute inset-y-0 left-0 flex flex-col p-8 xl:p-10"
+                    >
+                      <span className="absolute inset-x-0 top-0 h-1.5 bg-(--flow-ink)/[0.06]">
+                        <motion.span style={reduced ? { scaleX: 1 } : { scaleX: fill }} className="bg-sunrise absolute inset-0 origin-left" />
+                      </span>
+                      <div className="grid flex-1 grid-cols-[1fr_1.05fr] items-center gap-10">
+                        <StepCopy index={i} big />
+                        <div className="rounded-[24px] bg-(--flow-shell)/60 p-5">
+                          <StepVisual step={step.key} />
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.li>
+            );
+          })}
+        </ol>
+      </div>
     </div>
+  );
+}
+
+/** Phones: a plain list of tinted cards that rise in; each demo plays when its card arrives. On desktop it
+ *  stays in the accessibility tree (sr-only) as the readable version of the deck. */
+function StepList({ reduced }: { reduced: boolean }) {
+  return (
+    <ol className="mt-12 flex flex-col gap-4 lg:sr-only">
+      {steps.map((step, i) => (
+        <motion.li
+          key={step.key}
+          initial={reduced ? false : { opacity: 0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.15 }}
+          transition={{ duration: 0.7, ease: EASE_OUT }}
+          className="lux-card relative isolate overflow-hidden rounded-[28px] p-6 sm:p-8"
+        >
+          <span aria-hidden="true" className="absolute inset-0 -z-10" style={{ background: tintBg(step.tint) }} />
+          <StepCopy index={i} />
+          <div className="mt-6 rounded-[22px] bg-(--flow-shell)/60 p-4" aria-hidden="true">
+            <PlayOnView step={step.key} />
+          </div>
+        </motion.li>
+      ))}
+    </ol>
   );
 }
 
 export function HowItWorksSection() {
   const reduced = useReducedMotion() ?? false;
-  const listRef = useRef<HTMLOListElement>(null);
-  const stepRefs = useRef<(HTMLLIElement | null)[]>([]);
-  const [active, setActive] = useState(0);
+  const sectionRef = useRef<HTMLElement>(null);
 
-  const { scrollYProgress } = useScroll({ target: listRef, offset: ["start 60%", "end 60%"] });
-  const progress = useSpring(scrollYProgress, { stiffness: 120, damping: 26 });
-
-  useEffect(() => {
-    const io = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) setActive(Number((entry.target as HTMLElement).dataset.index));
-        });
-      },
-      { rootMargin: "-45% 0px -45% 0px" }
-    );
-    stepRefs.current.forEach((el) => el && io.observe(el));
-    return () => io.disconnect();
-  }, []);
-
-  const current = steps[active];
+  // the mango panel slides up over the previous section like a new sheet on the pile
+  const { scrollYProgress: enter } = useScroll({ target: sectionRef, offset: ["start end", "start 0.3"] });
+  const panelY = useTransform(enter, [0, 1], [180, 0]);
 
   return (
-    <section id="how-it-works" className="relative isolate py-[clamp(5rem,10vw,9rem)]">
-      <div aria-hidden="true" className="absolute inset-0 -z-10 bg-[linear-gradient(180deg,transparent,color-mix(in_oklab,var(--flow-peach)_70%,transparent)_30%,color-mix(in_oklab,var(--flow-peach)_70%,transparent)_70%,transparent)]" />
+    <section ref={sectionRef} id="how-it-works" className="relative isolate -mt-16 pt-[clamp(6rem,11vw,10rem)] pb-[clamp(5rem,10vw,9rem)]">
+      <motion.div
+        aria-hidden="true"
+        style={reduced ? undefined : { y: panelY }}
+        className="absolute inset-0 -z-10 overflow-hidden rounded-t-[48px] will-change-transform bg-[linear-gradient(175deg,var(--flow-lemon)_0%,var(--flow-mango)_28%,var(--flow-tangerine)_100%)]"
+      >
+        <div className="animate-aurora-a absolute -top-24 right-[-8rem] size-[34rem] rounded-full bg-(--flow-lemon)/80 blur-[120px]" />
+        <div className="animate-aurora-b absolute top-1/2 -left-40 size-[36rem] rounded-full bg-(--flow-pink)/55 blur-[130px]" />
+        <div className="animate-aurora-a absolute right-1/4 bottom-0 size-[30rem] rounded-full bg-(--flow-coral)/40 blur-[120px]" style={{ animationDelay: "-5s" }} />
+        <div className="lux-dots absolute inset-0 opacity-50" />
+      </motion.div>
 
       <div className="mx-auto max-w-[1240px] px-4 sm:px-6 lg:px-8">
         <div className="max-w-3xl">
-          <RevealHeading
+          <ScrubHeading
             className="font-display text-[clamp(2.4rem,5vw,4.4rem)] leading-[0.98] text-(--flow-ink)"
             lines={[{ text: "From a question" }, { text: "to a decision", className: "text-sunrise" }, { text: "in five steps." }]}
           />
           <p className="mt-5 max-w-[46ch] text-[17px] leading-relaxed text-(--text-secondary)">
-            Steps one and two work today. Drafting, approval and delivery to Notion and Slack are being built now.
+            All five steps work today. Every email, Slack post and Notion page waits for your approval before it goes anywhere.
           </p>
         </div>
 
-        <div className="mt-16 grid gap-10 lg:grid-cols-[1fr_1.05fr] lg:gap-16">
-          <ol ref={listRef} className="relative pl-12">
-            <FlowRail progress={progress} reduced={reduced} />
-            {steps.map((step, i) => {
-              const on = i === active;
-              return (
-                <li
-                  key={step.key}
-                  ref={(el) => {
-                    stepRefs.current[i] = el;
-                  }}
-                  data-index={i}
-                  className="relative flex min-h-[46vh] flex-col justify-center py-8 lg:min-h-[62vh]"
-                >
-                  <span
-                    aria-hidden="true"
-                    className={cn(
-                      "absolute top-1/2 -left-12 flex size-6 -translate-y-1/2 items-center justify-center rounded-full border-2 transition-all duration-500",
-                      on ? "scale-110 border-transparent" : "border-(--border-strong) bg-(--flow-cream)"
-                    )}
-                    style={on ? { background: step.accent, boxShadow: `0 0 0 6px color-mix(in oklab, ${step.accent} 30%, transparent)` } : undefined}
-                  />
-                  <div className={cn("transition-opacity duration-500", on ? "opacity-100" : "opacity-40 max-lg:opacity-100")}>
-                    <div className="flex items-center gap-3">
-                      <span className="tabular text-[14px] font-bold text-(--text-muted)">Step {i + 1}</span>
-                      <span
-                        className={cn(
-                          "rounded-full px-2.5 py-0.5 text-[11.5px] font-bold",
-                          step.live ? "bg-(--flow-mint)/45 text-(--flow-ink)" : "bg-(--flow-ink)/[0.06] text-(--text-muted)"
-                        )}
-                      >
-                        {step.live ? "Live now" : "Coming soon"}
-                      </span>
-                    </div>
-                    <h3 className="font-display mt-3 flex items-center gap-3 text-[clamp(2rem,3.4vw,2.9rem)] leading-none text-(--flow-ink)">
-                      <step.icon weight="duotone" className="size-9 shrink-0" style={{ color: step.accent }} />
-                      {step.title}
-                    </h3>
-                    <p className="mt-4 max-w-[44ch] text-[17px] leading-relaxed text-(--text-secondary)">{step.body}</p>
-                  </div>
-                  {/* inline visual on small screens (no sticky panel there) */}
-                  <div className="lux-card mt-6 rounded-[24px] bg-(--flow-cream) p-4 lg:hidden">
-                    <StepVisual step={step.key} />
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-
-          <div className="hidden lg:block">
-            <div className="sticky top-[calc(50vh-15rem)]">
-              <div className="lux-card lux-grain relative isolate h-[30rem] overflow-hidden rounded-[32px] p-8">
-                <motion.div
-                  aria-hidden="true"
-                  className="absolute -top-24 -right-24 -z-10 size-80 rounded-full blur-3xl"
-                  animate={{ background: current.accent }}
-                  transition={{ duration: 0.8 }}
-                  style={{ opacity: 0.45 }}
-                />
-                <div aria-hidden="true" className="lux-dots absolute inset-0 -z-10 opacity-60" />
-                <div className="flex items-center justify-between">
-                  <p className="text-[13px] font-semibold text-(--text-muted)">
-                    Step {active + 1} of {steps.length}
-                  </p>
-                  <div className="flex gap-1.5">
-                    {steps.map((s, i) => (
-                      <span
-                        key={s.key}
-                        className="h-1.5 rounded-full transition-all duration-500"
-                        style={{ width: i === active ? 28 : 8, background: i <= active ? s.accent : "color-mix(in oklab, var(--flow-ink) 12%, transparent)" }}
-                      />
-                    ))}
-                  </div>
-                </div>
-                <div className="relative z-[2] mt-8">
-                  <AnimatePresence mode="wait">
-                    <motion.div
-                      key={current.key}
-                      initial={reduced ? false : { opacity: 0, y: 24, filter: "blur(8px)" }}
-                      animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                      exit={reduced ? undefined : { opacity: 0, y: -16, filter: "blur(8px)" }}
-                      transition={{ duration: 0.5, ease: EASE_OUT }}
-                    >
-                      <StepVisual step={current.key} />
-                    </motion.div>
-                  </AnimatePresence>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <PanelDeck reduced={reduced} />
+        <StepList reduced={reduced} />
       </div>
     </section>
   );

@@ -1,53 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState, type ComponentType, type ReactNode, type SVGProps } from "react";
-import { animate, motion, useInView, useReducedMotion, useScroll, useTransform, type MotionValue } from "framer-motion";
+import { animate, motion, useInView, useReducedMotion, useScroll, useTransform } from "framer-motion";
 import { Check, LockKey, LockKeyOpen, Table, X } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { EASE_OUT, useCursorGlow } from "@/lib/motion";
 import { GmailGlyph, GoogleSheetsGlyph, NotionGlyph, SlackGlyph } from "@/components/site/brand-icons";
+import { ScrubHeading } from "@/components/site/primitives";
 
 type Glyph = ComponentType<SVGProps<SVGSVGElement>>;
-
-/* ---------- scroll-scrubbed headline: words fill from faint to solid as you scroll ---------- */
-
-function FillWord({ progress, range, className, children }: { progress: MotionValue<number>; range: [number, number]; className?: string; children: string }) {
-  const opacity = useTransform(progress, range, [0.16, 1]);
-  return (
-    <motion.span style={{ opacity }} className={cn("inline-block", className)}>
-      {children}
-    </motion.span>
-  );
-}
-
-function ScrubHeading({ lines, className }: { lines: { text: string; className?: string }[]; className?: string }) {
-  const ref = useRef<HTMLHeadingElement>(null);
-  const reduced = useReducedMotion() ?? false;
-  const { scrollYProgress } = useScroll({ target: ref, offset: ["start 0.92", "start 0.4"] });
-  const words = lines.flatMap((line, li) => line.text.split(" ").map((w) => ({ w, li, className: line.className })));
-  const n = words.length;
-  return (
-    <h2 ref={ref} aria-label={lines.map((l) => l.text).join(" ")} className={className}>
-      {lines.map((_, li) => (
-        <span key={li} aria-hidden="true" className="block">
-          {words.map((word, i) =>
-            word.li !== li ? null : (
-              <span key={i}>
-                {reduced ? (
-                  <span className={cn("inline-block", word.className)}>{word.w}</span>
-                ) : (
-                  <FillWord progress={scrollYProgress} range={[i / n, Math.min(1, (i + 1.6) / n)]} className={word.className}>
-                    {word.w}
-                  </FillWord>
-                )}{" "}
-              </span>
-            )
-          )}
-        </span>
-      ))}
-    </h2>
-  );
-}
 
 /* ---------- bento card: rises from depth, tied to its own scroll position ---------- */
 

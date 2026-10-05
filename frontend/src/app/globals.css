@@ -129,6 +129,9 @@
   --flow-lagoon: oklch(0.83 0.13 172);
   --flow-aqua: oklch(0.89 0.09 190);
   --flow-lemon: oklch(0.95 0.12 105);
+  /* "Mango sorbet" panel for #how-it-works (2026-10-05). */
+  --flow-mango: oklch(0.85 0.15 78);
+  --flow-tangerine: oklch(0.75 0.17 50);
 
   --surface: var(--flow-cream);
   --surface-raised: var(--flow-shell);
