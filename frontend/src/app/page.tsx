@@ -1,3 +1,4 @@
+import { IntroGate } from "@/components/site/intro-gate";
 import { Navbar } from "@/components/site/navbar";
 import { ScrollProgressBar } from "@/components/site/scroll-progress-bar";
 import { HeroSection } from "@/components/site/hero-section";
@@ -14,6 +15,7 @@ import { Footer } from "@/components/site/footer";
 export default function Home() {
   return (
     <div className="landing relative flex flex-1 flex-col bg-(--flow-cream)">
+      <IntroGate />
       <ScrollProgressBar />
       <Navbar />
       <main className="flex-1">
