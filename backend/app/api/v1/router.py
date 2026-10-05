@@ -5,6 +5,7 @@ runs, insights, billing, webhooks/...)."""
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    analytics,
     automations,
     billing,
     connections,
@@ -25,6 +26,7 @@ api_router.include_router(insights.router)
 api_router.include_router(documents.router)
 api_router.include_router(automations.router)
 api_router.include_router(dashboard.router)
+api_router.include_router(analytics.router)
 api_router.include_router(internal.router)
 api_router.include_router(clerk_webhooks.router)
 api_router.include_router(billing.router)

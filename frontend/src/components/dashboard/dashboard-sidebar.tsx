@@ -29,7 +29,7 @@ const navItems = [
   { label: "Team", href: null, icon: UsersThree, accent: "oklch(0.64 0.22 330)" },
   { label: "Documents", href: "/dashboard/documents", icon: FileText, accent: "var(--flow-coral)" },
   { label: "Automation", href: "/dashboard/automation", icon: Lightning, accent: "oklch(0.78 0.16 80)" },
-  { label: "Analytics", href: null, icon: ChartBar, accent: "oklch(0.68 0.15 160)" },
+  { label: "Analytics", href: "/dashboard/analytics", icon: ChartBar, accent: "oklch(0.68 0.15 160)" },
   { label: "Settings", href: null, icon: Gear, accent: "oklch(0.66 0.14 25)" },
 ];
 
