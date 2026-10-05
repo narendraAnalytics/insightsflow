@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AnimatePresence,
   motion,
+  useMotionValue,
   useMotionValueEvent,
   useReducedMotion,
   useScroll,
@@ -76,6 +77,66 @@ function useStageLenis(ref: React.RefObject<HTMLElement | null>, enabled: boolea
     };
   }, [ref, enabled]);
   return lenisRef;
+}
+
+/** Picture drifts a few pixels against the mouse for depth. Mouse/trackpad only; touch stays still. */
+function usePointerDrift(enabled: boolean) {
+  const px = useMotionValue(0);
+  const py = useMotionValue(0);
+  const x = useSpring(px, { stiffness: 60, damping: 20, mass: 0.6 });
+  const y = useSpring(py, { stiffness: 60, damping: 20, mass: 0.6 });
+  useEffect(() => {
+    if (!enabled || !window.matchMedia("(pointer: fine)").matches) return;
+    const onMove = (e: PointerEvent) => {
+      px.set((e.clientX / window.innerWidth - 0.5) * -24);
+      py.set((e.clientY / window.innerHeight - 0.5) * -16);
+    };
+    window.addEventListener("pointermove", onMove, { passive: true });
+    return () => window.removeEventListener("pointermove", onMove);
+  }, [enabled, px, py]);
+  return { x, y };
+}
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/** "02 / 06 · Connect": the number rolls over when the chapter changes. Decorative; the rail carries the a11y state. */
+function ChapterCounter({ active }: { active: number }) {
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute right-6 bottom-6 z-[3] hidden items-end gap-3 rounded-2xl border border-(--border-subtle) bg-(--flow-shell)/70 py-2.5 pr-4 pl-3 shadow-(--shadow-sm) backdrop-blur-md lg:flex xl:right-10"
+    >
+      <span className="font-display relative block h-[1.05em] w-[1.25em] overflow-hidden text-[52px] leading-none">
+        <AnimatePresence initial={false}>
+          <motion.span
+            key={active}
+            initial={{ y: "100%" }}
+            animate={{ y: "0%" }}
+            exit={{ y: "-100%" }}
+            transition={{ duration: 0.6, ease: EASE_OUT }}
+            className="text-sunrise absolute inset-0 text-right"
+          >
+            {pad2(active + 1)}
+          </motion.span>
+        </AnimatePresence>
+      </span>
+      <span className="flex min-w-[6.5rem] flex-col pb-1 text-[13px] leading-tight font-semibold">
+        <span className="text-(--text-muted)">/ {pad2(CHAPTERS.length)}</span>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.span
+            key={active}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.25 }}
+            className="text-(--flow-ink)"
+          >
+            {CHAPTERS[active].name}
+          </motion.span>
+        </AnimatePresence>
+      </span>
+    </div>
+  );
 }
 
 function HeroCtas({ displayName }: { displayName: string }) {
@@ -224,6 +285,13 @@ export function HeroSection() {
     setActive((a) => (a === i ? a : i));
   });
 
+  // 0..1 progress inside the current chapter, for the active rail dot's fill
+  const chapterFill = useTransform(scrollYProgress, (v) => {
+    const x = v * CHAPTERS.length;
+    return Math.max(0, Math.min(1, x - Math.min(LAST, Math.floor(x))));
+  });
+  const drift = usePointerDrift(!reduced);
+
   const hintOpacity = useTransform(scrollYProgress, [0, 0.04], [1, 0]);
   const wrapScale = useTransform(scrollYProgress, [0.93, 1], [1, 0.95]);
   const wrapRadius = useTransform(scrollYProgress, [0.93, 1], [0, 36]);
@@ -263,7 +331,10 @@ export function HeroSection() {
           style={{ scale: wrapScale, borderBottomLeftRadius: wrapRadius, borderBottomRightRadius: wrapRadius }}
           className="lux-grain absolute inset-0 isolate origin-bottom overflow-hidden"
         >
-          <HeroCanvas progress={frameProgress} className="absolute inset-0 -z-20 h-full w-full" />
+          {/* slight overscale so the pointer drift never shows an edge */}
+          <motion.div style={{ x: drift.x, y: drift.y, scale: 1.03 }} className="absolute inset-0 -z-20">
+            <HeroCanvas progress={frameProgress} className="absolute inset-0 h-full w-full" />
+          </motion.div>
           <div aria-hidden="true" className={cn(scrimClass, "-z-10")} />
 
           {/* copy: one chapter at a time, swapped by scroll position */}
@@ -296,13 +367,17 @@ export function HeroSection() {
               >
                 <span
                   className={cn(
-                    "block w-1.5 rounded-full transition-[height,background-color] duration-300",
-                    i === active ? "bg-sunrise h-7" : "h-1.5 bg-(--flow-ink)/25 group-hover:bg-(--flow-ink)/50"
+                    "relative block w-1.5 overflow-hidden rounded-full transition-[height,background-color] duration-300",
+                    i === active ? "h-7 bg-(--flow-ink)/15" : "h-1.5 bg-(--flow-ink)/25 group-hover:bg-(--flow-ink)/50"
                   )}
-                />
+                >
+                  {i === active && <motion.span style={{ scaleY: chapterFill }} className="bg-sunrise absolute inset-0 origin-top" />}
+                </span>
               </button>
             ))}
           </nav>
+
+          <ChapterCounter active={active} />
 
           <motion.div
             aria-hidden="true"

@@ -40,6 +40,37 @@ function useActiveSection() {
   return activeId;
 }
 
+/** Link label whose letters roll up on hover while a copy rolls in from below.
+ *  Screen readers get the label once; both visual layers are aria-hidden. */
+function RollText({ text }: { text: string }) {
+  const layer = (copy: boolean) =>
+    Array.from(text).map((ch, i) => (
+      <span
+        key={i}
+        className={cn(
+          "inline-block transition-transform duration-[450ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
+          copy
+            ? "translate-y-full group-hover/link:translate-y-0 group-focus-visible/link:translate-y-0"
+            : "group-hover/link:-translate-y-full group-focus-visible/link:-translate-y-full"
+        )}
+        style={{ transitionDelay: `${i * 14}ms` }}
+      >
+        {ch === " " ? " " : ch}
+      </span>
+    ));
+  return (
+    <span className="relative block overflow-hidden">
+      <span className="sr-only">{text}</span>
+      <span aria-hidden="true" className="block whitespace-nowrap">
+        {layer(false)}
+      </span>
+      <span aria-hidden="true" className="absolute inset-0 block whitespace-nowrap">
+        {layer(true)}
+      </span>
+    </span>
+  );
+}
+
 function NavCredits() {
   const credits = useCreditBalance();
   return (
@@ -65,6 +96,7 @@ function BackendDot() {
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [tucked, setTucked] = useState(false);
   const [hovered, setHovered] = useState<string | null>(null);
   const reduced = useReducedMotion();
   const activeId = useActiveSection();
@@ -72,7 +104,14 @@ export function Navbar() {
   const displayName = user?.username ?? user?.firstName ?? "there";
   const { scrollY } = useScroll();
 
-  useMotionValueEvent(scrollY, "change", (latest) => setScrolled(latest > 48));
+  useMotionValueEvent(scrollY, "change", (latest) => {
+    setScrolled(latest > 48);
+    // Tuck the bar away while scrolling down (the hero story gets the full screen),
+    // bring it back on any scroll up and always near the top.
+    const previous = scrollY.getPrevious() ?? 0;
+    if (latest < 120) setTucked(false);
+    else if (Math.abs(latest - previous) > 4) setTucked(latest > previous);
+  });
 
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? "hidden" : "";
@@ -84,7 +123,13 @@ export function Navbar() {
   const highlighted = hovered ?? activeId;
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50 flex justify-center px-3 pt-3 sm:px-6 sm:pt-4">
+    <motion.header
+      // numeric y: at 0 Framer writes `transform: none`, so the fixed mobile menu inside isn't trapped
+      animate={{ y: tucked && !mobileOpen && !reduced ? -120 : 0 }}
+      transition={{ duration: 0.45, ease: EASE_OUT }}
+      onFocusCapture={() => setTucked(false)}
+      className="fixed inset-x-0 top-0 z-50 flex justify-center px-3 pt-3 sm:px-6 sm:pt-4"
+    >
       <motion.nav
         aria-label="Main"
         initial={reduced ? false : { opacity: 0, y: -20 }}
@@ -112,7 +157,7 @@ export function Navbar() {
                   onPointerEnter={() => setHovered(link.id)}
                   aria-current={activeId === link.id ? "true" : undefined}
                   className={cn(
-                    "relative isolate block rounded-full px-4 py-2 text-[14px] font-semibold transition-colors duration-200",
+                    "group/link relative isolate block rounded-full px-4 py-2 text-[14px] font-semibold transition-colors duration-200",
                     isOn ? "text-(--flow-ink)" : "text-(--text-muted) hover:text-(--flow-ink)"
                   )}
                 >
@@ -123,7 +168,7 @@ export function Navbar() {
                       transition={{ type: "spring", stiffness: 380, damping: 32 }}
                     />
                   )}
-                  {link.label}
+                  <RollText text={link.label} />
                 </a>
               </li>
             );
@@ -220,6 +265,6 @@ export function Navbar() {
           </motion.div>
         )}
       </AnimatePresence>
-    </header>
+    </motion.header>
   );
 }
