@@ -97,7 +97,7 @@ export function IntroGate() {
               transition={{ delay: 0.6, duration: 0.7, ease: EASE_OUT }}
               whileHover={reduce ? undefined : { scale: 1.04 }}
               whileTap={reduce ? undefined : { scale: 0.97 }}
-              className="group inline-flex items-center gap-2.5 rounded-full border border-white/30 bg-gradient-to-r from-flow-coral via-flow-magenta to-flow-magenta-700 px-10 py-4 text-lg font-bold tracking-wide text-white shadow-[0_0_0_6px_rgba(255,255,255,0.12),0_12px_48px_-6px_oklch(0.62_0.21_340/0.75)] [text-shadow:0_1px_8px_rgba(0,0,0,0.35)] transition-[filter,box-shadow] hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
+              className="group inline-flex items-center gap-3 rounded-full bg-gradient-to-r from-flow-amber via-flow-mint to-flow-cyan px-11 py-4 font-display text-xl font-extrabold uppercase tracking-[0.22em] text-flow-ink shadow-[0_0_0_6px_rgba(255,255,255,0.14),0_12px_48px_-6px_oklch(0.84_0.15_72/0.8)] transition-[filter,box-shadow] hover:brightness-105 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
             >
               Enter
               <ArrowRight
