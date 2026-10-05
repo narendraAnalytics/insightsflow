@@ -94,7 +94,7 @@ export function FinalCtaSection() {
               <Magnetic strength={12}>
                 <SignUpButton mode="redirect" forceRedirectUrl="/">
                   <button type="button" className={cn(primaryButtonClass, "min-h-13 px-8 py-4 text-[16px]")}>
-                    Start free
+                    Get started
                     <ArrowRight weight="bold" className="size-4 transition-transform duration-200 group-hover:translate-x-1" />
                   </button>
                 </SignUpButton>
@@ -117,7 +117,9 @@ export function FinalCtaSection() {
               </Magnetic>
             </Show>
           </div>
-          <p className="mt-6 text-[14px] font-medium text-(--text-muted)">Free to start. No credit card needed.</p>
+          <p className="mt-6 text-[14px] font-medium text-(--text-muted)">
+            Add credits to begin: 1 credit = ₹1. Each new connection is 50 credits, each question 2.
+          </p>
         </div>
       </motion.div>
     </section>

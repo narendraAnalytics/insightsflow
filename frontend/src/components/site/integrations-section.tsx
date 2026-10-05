@@ -15,7 +15,7 @@ const legend: { icon: ComponentType<SVGProps<SVGSVGElement>>; name: string; role
   { icon: NotionGlyph, name: "Notion", role: "Keeps every approved report in one place", live: true },
   { icon: SlackGlyph, name: "Slack", role: "Posts approved summaries to the right channel", live: true },
   { icon: (props) => <LockKey weight="duotone" className="text-(--flow-magenta)" {...props} />, name: "Clerk", role: "Keeps sign-in and accounts secure", live: true },
-  { icon: (props) => <CreditCard weight="duotone" className="text-(--flow-coral)" {...props} />, name: "Razorpay", role: "Will handle secure payments for plans", live: false },
+  { icon: (props) => <CreditCard weight="duotone" className="text-(--flow-coral)" {...props} />, name: "Razorpay", role: "Handles secure credit top-ups", live: true },
 ];
 
 export function IntegrationsSection() {
