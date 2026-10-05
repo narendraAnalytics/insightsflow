@@ -14,6 +14,7 @@ import {
 } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { useAnalytics, type Analytics, type RangeDays } from "@/hooks/use-analytics";
+import { SheetsAnalytics } from "@/components/dashboard/analytics/sheets-analytics";
 
 const RANGES: { value: RangeDays; label: string }[] = [
   { value: 7, label: "7 days" },
@@ -312,7 +313,7 @@ function SourcesCard({ data }: { data: Analytics }) {
   );
 }
 
-export function AnalyticsView() {
+function UsageView() {
   const [range, setRange] = useState<RangeDays>(30);
   const { data, error, isLoading } = useAnalytics(range);
 
@@ -370,6 +371,37 @@ export function AnalyticsView() {
           <SourcesCard data={data} />
         </div>
       )}
+    </div>
+  );
+}
+
+const TABS = [
+  { id: "usage", label: "Usage" },
+  { id: "sheets", label: "Connected sheets" },
+] as const;
+
+export function AnalyticsView() {
+  const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("usage");
+  return (
+    <div className="flex flex-col gap-5">
+      <div role="tablist" aria-label="Analytics" className="glass-panel inline-flex self-start rounded-full p-1">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.id}
+            onClick={() => setTab(t.id)}
+            className={cn(
+              "rounded-full px-5 py-1.5 text-sm font-medium transition-colors",
+              tab === t.id ? "bg-(--flow-ink) text-white" : "text-(--flow-ink)/65 hover:text-(--flow-ink)"
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {tab === "usage" ? <UsageView /> : <SheetsAnalytics />}
     </div>
   );
 }

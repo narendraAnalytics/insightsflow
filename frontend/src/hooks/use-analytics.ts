@@ -54,3 +54,103 @@ export function useAnalytics(range: RangeDays) {
   // Loading whenever the data on screen isn't for the selected range yet.
   return { data, error, isLoading: loadedFor !== range };
 }
+
+// --- Connected sheets ---------------------------------------------------------------
+
+export type SheetSource = { id: string; name: string; tab_title: string; row_count: number };
+
+export type SheetProfile = {
+  source: SheetSource;
+  truncated: boolean;
+  rows: number;
+  columns: number;
+  missing_pct: number;
+  duplicate_rows: number;
+  column_profiles: {
+    name: string;
+    type: "number" | "text" | "date";
+    missing: number;
+    distinct: number;
+    sum: number | null;
+    mean: number | null;
+    min: number | null;
+    max: number | null;
+    top: { value: string; count: number }[];
+  }[];
+  measures: string[];
+  dimensions: string[];
+  dates: string[];
+  selected: {
+    measure: string | null;
+    agg: "sum" | "mean" | "count";
+    group_by: string | null;
+    date_column: string | null;
+  };
+  total: number | null;
+  total_words: string | null;
+  breakdown: { label: string; value: number }[];
+  trend: { label: string; value: number }[];
+};
+
+export type SheetQuery = {
+  measure?: string;
+  agg?: "sum" | "mean" | "count";
+  group_by?: string;
+  date_column?: string;
+};
+
+export function useSheetSources() {
+  const { isSignedIn, getToken } = useAuth();
+  const [sources, setSources] = useState<SheetSource[] | null>(null);
+  useEffect(() => {
+    if (!isSignedIn) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiFetch<SheetSource[]>("/api/v1/analytics/sheets", await getToken());
+        if (!cancelled) setSources(res);
+      } catch {
+        if (!cancelled) setSources([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isSignedIn, getToken]);
+  return sources;
+}
+
+export function useSheetProfile(sourceId: string | null, query: SheetQuery) {
+  const { isSignedIn, getToken } = useAuth();
+  const [profile, setProfile] = useState<SheetProfile | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [doneFor, setDoneFor] = useState<string | null>(null);
+
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(query)) if (v) qs.set(k, v);
+  const wanted = sourceId ? `${sourceId}?${qs.toString()}` : null;
+
+  useEffect(() => {
+    if (!isSignedIn || !wanted) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiFetch<SheetProfile>(`/api/v1/analytics/sheets/${wanted}`, await getToken());
+        if (cancelled) return;
+        setProfile(res);
+        setError(null);
+      } catch (err) {
+        if (cancelled) return;
+        setProfile(null);
+        setError(err instanceof Error ? err.message : "Failed to analyse this sheet");
+      } finally {
+        if (!cancelled) setDoneFor(wanted);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isSignedIn, getToken, wanted]);
+
+  return { profile, error, isLoading: wanted !== null && doneFor !== wanted };
+}
