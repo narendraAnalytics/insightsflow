@@ -25,12 +25,15 @@ export function TooltipLayer() {
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let current: HTMLElement | null = null;
-    let stashed: string | null = null;
+    // Every titled element from the hovered one up to the root. All of them are lifted, not just
+    // the nearest: a titled parent would otherwise show its native bubble the moment the child's
+    // title is gone, and two tooltips would stack.
+    let stashed: [HTMLElement, string][] = [];
 
     const restore = () => {
-      if (current && stashed !== null && !current.hasAttribute("title")) current.setAttribute("title", stashed);
+      for (const [el, text] of stashed) if (!el.hasAttribute("title")) el.setAttribute("title", text);
+      stashed = [];
       current = null;
-      stashed = null;
     };
     const hide = () => {
       clearTimeout(timer);
@@ -44,8 +47,12 @@ export function TooltipLayer() {
       const text = el.getAttribute("title");
       if (!text || !text.trim()) return;
       current = el;
-      stashed = text;
-      el.removeAttribute("title");
+      for (let node: HTMLElement | null = el; node; node = node.parentElement) {
+        const t = node.getAttribute("title");
+        if (t === null) continue;
+        stashed.push([node, t]);
+        node.removeAttribute("title");
+      }
       timer = setTimeout(() => setTip({ text, rect: el.getBoundingClientRect() }), SHOW_DELAY);
     };
     const target = (e: Event) => {

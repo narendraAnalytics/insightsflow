@@ -6,11 +6,20 @@ export const LOW_CREDITS = 50;
 
 /** Small "N credits" badge. `credits` null = still loading (shows a dash). Turns amber
  * when low, so the user sees it before a blocked action. */
-export function CreditsPill({ credits, className }: { credits: number | null; className?: string }) {
+export function CreditsPill({
+  credits,
+  className,
+  title,
+}: {
+  credits: number | null;
+  className?: string;
+  /** Tooltip text. Pass null when a parent already has one, so two never stack. */
+  title?: string | null;
+}) {
   const low = credits !== null && credits < LOW_CREDITS;
   return (
     <span
-      title={low ? "Low on credits — buy more" : "Your credits"}
+      title={title === null ? undefined : (title ?? (low ? "Low on credits — buy more" : "Your credits"))}
       aria-label={
         credits === null ? "Credits loading" : low ? `${credits} credits, low` : `${credits} credits`
       }
