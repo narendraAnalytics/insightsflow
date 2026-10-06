@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useAuth, useClerk } from "@clerk/nextjs";
-import { CheckCircle, DownloadSimple, Trash, UserMinus } from "@phosphor-icons/react";
+import { CheckCircle, DownloadSimple, FilePdf, Trash, UserMinus } from "@phosphor-icons/react";
 import { apiFetch } from "@/lib/api";
+import { buildReportHtml, printReport, type ExportData } from "@/lib/export-report";
 import { ConfirmDeleteDialog } from "@/components/dashboard/settings/confirm-delete-dialog";
 
 const Z = "font-(family-name:--font-zeyada)";
@@ -29,30 +30,34 @@ const summarise = (d: Deleted) =>
 export function DataSettings() {
   const { getToken } = useAuth();
   const { signOut } = useClerk();
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState<"pdf" | "json" | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [dataOpen, setDataOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [removed, setRemoved] = useState<Deleted | null>(null);
 
-  const download = async () => {
-    setExporting(true);
+  const exportAs = async (kind: "pdf" | "json") => {
+    setExporting(kind);
     setExportError(null);
     try {
-      const data = await apiFetch<unknown>("/api/v1/account/export", await getToken());
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `insightflow-data-${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      const data = await apiFetch<ExportData>("/api/v1/account/export", await getToken());
+      if (kind === "pdf") {
+        await printReport(buildReportHtml(data));
+      } else {
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `insightflow-data-${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
     } catch (err) {
       setExportError(err instanceof Error ? err.message : "Couldn't prepare your download. Try again.");
     } finally {
-      setExporting(false);
+      setExporting(null);
     }
   };
 
@@ -85,21 +90,36 @@ export function DataSettings() {
           <div className="max-w-xl">
             <p className={`text-gradient-flow ${Z} text-[30px] leading-none font-normal`}>Download your data</p>
             <p className={`mt-1 ${Z} text-[21px] leading-snug font-normal text-(--flow-ink)/70`}>
-              A JSON file with your profile, connected accounts, sheets, chats, automations and credit history.
-              Sign-in tokens are never included.
+              A readable report of your profile, connected accounts, sheets, chats, automations and credit
+              history. Sign-in tokens are never included.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={download}
-            disabled={exporting}
-            className={`bg-gradient-flow inline-flex items-center gap-2 rounded-full px-6 py-2.5 ${Z} text-[23px] leading-none font-normal text-(--flow-cream) disabled:opacity-60`}
-            style={{ boxShadow: "0 18px 30px -14px var(--flow-magenta)" }}
-          >
-            <DownloadSimple weight="bold" className="size-4" />
-            {exporting ? "Preparing…" : "Download"}
-          </button>
+          <div className="flex flex-col items-start gap-1.5 sm:items-end">
+            <button
+              type="button"
+              onClick={() => void exportAs("pdf")}
+              disabled={exporting !== null}
+              className={`bg-gradient-flow inline-flex items-center gap-2 rounded-full px-6 py-2.5 ${Z} text-[23px] leading-none font-normal text-(--flow-cream) disabled:opacity-60`}
+              style={{ boxShadow: "0 18px 30px -14px var(--flow-magenta)" }}
+            >
+              <FilePdf weight="bold" className="size-4" />
+              {exporting === "pdf" ? "Preparing…" : "Download PDF"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void exportAs("json")}
+              disabled={exporting !== null}
+              title="The same data as a JSON file, for other tools"
+              className={`inline-flex items-center gap-1.5 ${Z} text-[19px] leading-none font-normal text-(--flow-ink)/60 transition-colors hover:text-(--flow-magenta) disabled:opacity-50`}
+            >
+              <DownloadSimple weight="bold" className="size-3.5" />
+              {exporting === "json" ? "Preparing…" : "Raw data (JSON)"}
+            </button>
+          </div>
         </div>
+        <p className={`mt-2 ${Z} text-[18px] leading-snug font-normal text-(--flow-ink)/50`}>
+          The PDF opens your browser&apos;s print window: choose &ldquo;Save as PDF&rdquo; as the destination.
+        </p>
         {exportError && (
           <p role="alert" className={`mt-3 ${Z} text-[20px] leading-snug text-(--flow-coral)`}>{exportError}</p>
         )}

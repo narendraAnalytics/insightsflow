@@ -7,28 +7,13 @@ import { useCredits } from "@/components/billing/credits-provider";
 import { LOW_CREDITS } from "@/components/billing/credits-pill";
 import { apiFetch } from "@/lib/api";
 import { CREDITS_CHANGED_EVENT } from "@/lib/credits-events";
+import { reasonLabel } from "@/lib/credit-reasons";
 
 const Z = "font-(family-name:--font-zeyada)";
 const CARD = "rounded-[26px] border border-(--flow-cream) bg-(--flow-cream) p-5";
 const CARD_SHADOW = { boxShadow: "0 24px 40px -28px color-mix(in oklab, var(--flow-magenta) 45%, transparent)" };
 
 type Entry = { delta: number; reason: string; created_at: string };
-
-const REASONS: Record<string, string> = {
-  topup: "Credits bought",
-  connect_google_sheets: "Added a sheet tab",
-  connect_gmail: "Connected Gmail",
-  connect_slack: "Connected Slack",
-  connect_notion: "Connected Notion",
-  automation_run: "Automation run",
-};
-
-function reasonLabel(reason: string): string {
-  if (REASONS[reason]) return REASONS[reason];
-  if (reason.includes("question") || reason.includes("insight") || reason.includes("ask")) return "AI question";
-  const text = reason.replace(/_/g, " ");
-  return text.charAt(0).toUpperCase() + text.slice(1);
-}
 
 const when = (iso: string) =>
   new Date(iso).toLocaleString("en-IN", {
