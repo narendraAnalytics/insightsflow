@@ -53,6 +53,8 @@ services:
         sync: false
       - key: CRON_SECRET # 32+ random chars; also the X-Cron-Secret header on the pinger
         sync: false
+      - key: SENTRY_DSN # Better Stack -> Errors -> application DSN (Sentry-compatible); unset = off
+        sync: false
       - key: SLACK_CLIENT_ID # Slack app -> Basic Information -> App Credentials
         sync: false
       - key: SLACK_CLIENT_SECRET

@@ -9,7 +9,7 @@ Sarvam) as those pieces are implemented; see roadmap.txt section 8.
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -51,7 +51,13 @@ class Settings(BaseSettings):
     clerk_jwt_key: str | None = None
     clerk_authorized_parties: str = "http://localhost:3000"
 
+    # Error tracking (app/core/observability.py). Any Sentry-compatible DSN: Better Stack
+    # today. Unset = off. Release defaults to the commit Render/Coolify expose, if any.
     sentry_dsn: str | None = None
+    sentry_traces_sample_rate: float = Field(0.0, ge=0.0, le=1.0)
+    sentry_release: str | None = Field(
+        None, validation_alias=AliasChoices("SENTRY_RELEASE", "RENDER_GIT_COMMIT", "SOURCE_COMMIT")
+    )
 
     # Phase 3: Google Sheets OAuth (drive.file scope — see roadmap.txt
     # "App #1"). google_redirect_uri must exactly match a URI registered on

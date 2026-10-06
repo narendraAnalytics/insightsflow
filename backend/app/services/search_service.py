@@ -9,9 +9,11 @@ import re
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.db.models.chat import ChatConversation, ChatMessage
 from app.db.models.data_source import DataSource
@@ -88,7 +90,7 @@ async def search(db: AsyncSession, user_id: uuid.UUID, raw_query: str | None) ->
         return SearchResults(query=query, sheets=[], documents=[], chats=[])
     patterns = [like_pattern(w) for w in words]
 
-    def every_word(*columns) -> object:
+    def every_word(*columns: Any) -> ColumnElement[bool]:
         # Each word must appear in at least one of the columns.
         return and_(*[or_(*[c.ilike(p, escape="\\") for c in columns]) for p in patterns])
 

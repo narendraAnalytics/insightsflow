@@ -6,6 +6,7 @@ each file has one job.
 import time
 import uuid
 
+import sentry_sdk
 import structlog
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
@@ -25,6 +26,8 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         request_id = request.headers.get(REQUEST_ID_HEADER) or str(uuid.uuid4())
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(request_id=request_id)
+        # Same id on the error report as in the logs and the client's error body.
+        sentry_sdk.set_tag("request_id", request_id)
 
         start = time.perf_counter()
         try:

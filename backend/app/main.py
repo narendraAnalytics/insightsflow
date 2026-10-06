@@ -2,7 +2,6 @@
 
 from contextlib import asynccontextmanager
 
-import sentry_sdk
 import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,6 +11,7 @@ from app.core.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.middleware import RequestContextMiddleware
+from app.core.observability import init_sentry
 from app.core.platform import apply_windows_asyncio_fix
 
 # Helps pytest-asyncio and any plain asyncio.run() caller on Windows dev
@@ -35,12 +35,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings)
 
-    if settings.sentry_dsn:
-        sentry_sdk.init(
-            dsn=settings.sentry_dsn,
-            environment=settings.app_env,
-            traces_sample_rate=0.1 if settings.is_production else 1.0,
-        )
+    init_sentry(settings)
 
     app = FastAPI(
         title="InsightFlow API",
