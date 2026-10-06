@@ -1,9 +1,10 @@
 "use client";
 
-import { Bell, MagnifyingGlass } from "@phosphor-icons/react";
+import { MagnifyingGlass } from "@phosphor-icons/react";
 import { useUser } from "@clerk/nextjs";
 import { CreditsPill } from "@/components/billing/credits-pill";
 import { useCredits } from "@/components/billing/credits-provider";
+import { NotificationsBell } from "@/components/dashboard/notifications-bell";
 
 export function DashboardTopbar() {
   const { user } = useUser();
@@ -23,13 +24,7 @@ export function DashboardTopbar() {
       </div>
 
       <div className="ml-auto flex items-center gap-3">
-        <button
-          type="button"
-          title="Notifications — coming soon"
-          className="relative flex size-10 items-center justify-center rounded-full text-(--flow-ink)/70 transition-colors hover:bg-(--flow-ink)/6"
-        >
-          <Bell weight="bold" className="size-[19px]" />
-        </button>
+        <NotificationsBell />
 
         <button type="button" onClick={openBuy} title="Buy credits" className="rounded-full transition-transform hover:scale-[1.04] active:scale-[0.97]">
           <CreditsPill credits={credits} />
