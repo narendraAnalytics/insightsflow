@@ -153,7 +153,7 @@ export function BuyCreditsDialog({ open, onOpenChange, onPaid }: Props) {
               </DialogPrimitive.Title>
             </div>
             <DialogPrimitive.Description className="font-(family-name:--font-zeyada) text-[21px] leading-snug font-normal text-(--flow-ink)/75">
-              1 ₹ = 1 credit. Connecting an app costs {connectCost} credits and each AI question costs {questionCost}.
+              Connecting an app costs {connectCost} credits and each AI question costs {questionCost}.
             </DialogPrimitive.Description>
 
             <div className="flex gap-2">

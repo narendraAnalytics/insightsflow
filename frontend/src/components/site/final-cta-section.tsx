@@ -118,7 +118,7 @@ export function FinalCtaSection() {
             </Show>
           </div>
           <p className="mt-6 text-[14px] font-medium text-(--text-muted)">
-            Add credits to begin: 1 credit = ₹1. Each new connection is 50 credits, each question 2.
+            Add credits to begin. Each new connection is 50 credits, each question 2.
           </p>
         </div>
       </motion.div>

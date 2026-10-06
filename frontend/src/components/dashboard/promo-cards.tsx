@@ -22,7 +22,7 @@ export function CreditsCard() {
           {credits === null ? "–" : credits.toLocaleString("en-IN")}
         </p>
         <p className="mt-1 text-[19px] font-(family-name:--font-zeyada) leading-snug font-normal text-(--flow-ink)/70">
-          1 ₹ = 1 credit. {connectCost} to connect an app, {questionCost} per AI question.
+          {connectCost} to connect an app, {questionCost} per AI question.
         </p>
         {credits !== null && credits < connectCost && (
           <p
