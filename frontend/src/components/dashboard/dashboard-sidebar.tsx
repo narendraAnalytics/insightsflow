@@ -30,7 +30,7 @@ const navItems = [
   { label: "Documents", href: "/dashboard/documents", icon: FileText, accent: "var(--flow-coral)" },
   { label: "Automation", href: "/dashboard/automation", icon: Lightning, accent: "oklch(0.78 0.16 80)" },
   { label: "Analytics", href: "/dashboard/analytics", icon: ChartBar, accent: "oklch(0.68 0.15 160)" },
-  { label: "Settings", href: null, icon: Gear, accent: "oklch(0.66 0.14 25)" },
+  { label: "Settings", href: "/dashboard/settings", icon: Gear, accent: "oklch(0.66 0.14 25)" },
 ];
 
 /** Colored duotone icon in a soft tinted tile; filled + translucent white when active. */
@@ -75,6 +75,8 @@ const STORAGE_KEY = "insightflow-dashboard-sidebar-collapsed";
 export function DashboardSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
+  const isActive = (href: string) =>
+    pathname === href || (href !== "/dashboard" && pathname.startsWith(`${href}/`));
 
   useEffect(() => {
     try {
@@ -136,7 +138,7 @@ export function DashboardSidebar() {
               href={item.href}
               aria-label={item.label}
               style={
-                pathname === item.href
+                isActive(item.href)
                   ? {
                       backgroundImage: `linear-gradient(120deg, ${item.accent}, color-mix(in oklab, ${item.accent} 55%, var(--flow-pink)))`,
                       boxShadow: `0 10px 24px -12px color-mix(in oklab, ${item.accent} 70%, transparent)`,
@@ -146,12 +148,12 @@ export function DashboardSidebar() {
               className={cn(
                 "group relative flex items-center gap-3 rounded-2xl px-2 py-1.5 font-(family-name:--font-zeyada) text-[22px] leading-none font-normal whitespace-nowrap transition-all duration-300",
                 collapsed && "justify-center px-0",
-                pathname === item.href
+                isActive(item.href)
                   ? "text-(--flow-cream)"
                   : "text-(--flow-ink)/80 hover:translate-x-0.5 hover:text-(--flow-ink) hover:bg-[linear-gradient(90deg,color-mix(in_oklab,var(--acc)_18%,transparent),color-mix(in_oklab,var(--acc)_3%,transparent))] hover:shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--acc)_22%,transparent)]"
               )}
             >
-              <IconTile item={item} active={pathname === item.href} />
+              <IconTile item={item} active={isActive(item.href)} />
               {!collapsed && item.label}
               {collapsed && <NavTooltip label={item.label} accent={item.accent} />}
             </a>
