@@ -1,9 +1,9 @@
 "use client";
 
-import { MagnifyingGlass } from "@phosphor-icons/react";
 import { useUser } from "@clerk/nextjs";
 import { CreditsPill, LOW_CREDITS } from "@/components/billing/credits-pill";
 import { useCredits } from "@/components/billing/credits-provider";
+import { CommandPalette } from "@/components/dashboard/command-palette";
 import { NotificationsBell } from "@/components/dashboard/notifications-bell";
 
 export function DashboardTopbar() {
@@ -13,15 +13,7 @@ export function DashboardTopbar() {
 
   return (
     <header className="flex items-center gap-4 border-b border-(--flow-ink)/8 bg-(--flow-cream) px-5 py-3.5 sm:px-8">
-      <div className="glass-panel flex max-w-md flex-1 items-center gap-2.5 rounded-full px-4 py-2.5">
-        <MagnifyingGlass className="size-4 text-(--flow-ink)/45" />
-        <input
-          type="text"
-          placeholder="Search anything…"
-          disabled
-          className="w-full bg-transparent text-[14px] text-(--flow-ink)/70 placeholder:text-(--flow-ink)/40 focus:outline-none disabled:cursor-not-allowed"
-        />
-      </div>
+      <CommandPalette />
 
       <div className="ml-auto flex items-center gap-3">
         <NotificationsBell />
