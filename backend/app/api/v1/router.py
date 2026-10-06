@@ -16,6 +16,7 @@ from app.api.v1 import (
     insights,
     internal,
     me,
+    search,
 )
 from app.api.v1.webhooks import clerk as clerk_webhooks
 
@@ -29,6 +30,7 @@ api_router.include_router(documents.router)
 api_router.include_router(automations.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(analytics.router)
+api_router.include_router(search.router)
 api_router.include_router(internal.router)
 api_router.include_router(clerk_webhooks.router)
 api_router.include_router(billing.router)

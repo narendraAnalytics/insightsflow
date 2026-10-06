@@ -4,19 +4,21 @@ separate activity-log table: every event here is a row's own `created_at`."""
 
 import uuid
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import Select, func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
+from app.db.models.automation import Automation, AutomationRun
 from app.db.models.chat import ChatConversation, ChatMessage
 from app.db.models.connection import Connection
 from app.db.models.data_source import DataSource
 
 ACTIVITY_LIMIT = 8
 DAILY_ACTIVITY_DAYS = 7
+RUN_WINDOW_DAYS = 30
 
 # The chart's days are Indian days, matching the rest of the product (scheduled mail is IST
 # too). IST has no daylight saving, so a fixed +05:30 offset is exact.
@@ -47,6 +49,13 @@ class ActivityEvent:
     detail: str | None
     at: datetime
     provider: str | None = None  # set for connection events
+
+
+@dataclass
+class RunOverview:
+    window_days: int
+    automations: int  # how many the user has (tells "no automations" from "no runs yet")
+    by_status: dict[str, int]  # run status -> count within the window
 
 
 @dataclass
@@ -230,3 +239,21 @@ async def daily_activity(db: AsyncSession, user_id: uuid.UUID) -> list[DailyActi
             )
         )
     return days
+
+
+async def run_overview(db: AsyncSession, user_id: uuid.UUID) -> RunOverview:
+    """Automation runs started in the last RUN_WINDOW_DAYS days, counted by status."""
+    since = datetime.now(UTC) - timedelta(days=RUN_WINDOW_DAYS)
+    rows = await db.execute(
+        select(AutomationRun.status, func.count())
+        .where(AutomationRun.user_id == user_id, AutomationRun.started_at >= since)
+        .group_by(AutomationRun.status)
+    )
+    automations = await _count(
+        db, select(func.count()).select_from(Automation).where(Automation.user_id == user_id)
+    )
+    return RunOverview(
+        window_days=RUN_WINDOW_DAYS,
+        automations=automations,
+        by_status={status: int(n) for status, n in rows.all()},
+    )

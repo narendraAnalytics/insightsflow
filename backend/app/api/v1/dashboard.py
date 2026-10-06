@@ -48,6 +48,12 @@ class DailyActivityOut(BaseModel):
     chats: int
 
 
+class RunOverviewOut(BaseModel):
+    window_days: int
+    automations: int
+    by_status: dict[str, int]
+
+
 class DashboardSummary(BaseModel):
     stats: StatsOut
     activity: list[ActivityOut]

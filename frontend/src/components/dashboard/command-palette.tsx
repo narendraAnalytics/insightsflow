@@ -6,6 +6,7 @@ import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import {
   ArrowBendDownLeft,
   ChartBar,
+  ChatCircleText,
   Coins,
   Database,
   FileText,
@@ -17,17 +18,20 @@ import {
   Plug,
   Robot,
   ShieldCheck,
+  Table,
   UploadSimple,
 } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
+import { useAuth } from "@clerk/nextjs";
 import { useCredits } from "@/components/billing/credits-provider";
+import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 const Z = "font-(family-name:--font-zeyada)";
 const RECENTS_KEY = "insightflow:palette-recents";
 const MAX_RECENTS = 4;
 
-type Group = "Go to" | "Actions";
+type Group = "Go to" | "Actions" | "Sheets" | "Documents" | "Chats";
 type Entry = {
   id: string;
   label: string;
@@ -38,7 +42,24 @@ type Entry = {
   keywords: string;
   href?: string;
   run?: "buy";
+  dynamic?: boolean; // a search hit on the user's own data, not a fixed entry
 };
+
+type SearchResponse = {
+  sheets: { id: string; name: string; tab_title: string; row_count: number }[];
+  documents: { id: string; filename: string; template: string; status: string; row_count: number }[];
+  chats: { id: string; title: string; snippet: string | null }[];
+};
+
+const DATA_ACCENT = { sheets: "oklch(0.66 0.12 190)", documents: "var(--flow-coral)", chats: "oklch(0.66 0.21 10)" };
+
+function toEntries(r: SearchResponse): Entry[] {
+  return [
+    ...r.chats.map((c): Entry => ({ id: `chat:${c.id}`, label: c.title, hint: c.snippet ?? "AI Insights chat", group: "Chats", icon: ChatCircleText, accent: DATA_ACCENT.chats, keywords: "", href: `/dashboard/ai-insights?chat=${c.id}`, dynamic: true })),
+    ...r.sheets.map((s): Entry => ({ id: `sheet:${s.id}`, label: s.tab_title ? `${s.name} · ${s.tab_title}` : s.name, hint: `${s.row_count.toLocaleString("en-IN")} rows · open in Projects`, group: "Sheets", icon: Table, accent: DATA_ACCENT.sheets, keywords: "", href: "/dashboard/projects", dynamic: true })),
+    ...r.documents.map((d): Entry => ({ id: `doc:${d.id}`, label: d.filename, hint: d.status === "ready" ? `${d.template.replace("_", " ")} · ${d.row_count.toLocaleString("en-IN")} rows` : d.status, group: "Documents", icon: FileText, accent: DATA_ACCENT.documents, keywords: "", href: "/dashboard/documents", dynamic: true })),
+  ];
+}
 
 const ENTRIES: Entry[] = [
   { id: "dashboard", label: "Dashboard", hint: "Overview and KPIs", group: "Go to", icon: House, accent: "var(--flow-magenta)", keywords: "home overview kpi", href: "/dashboard" },
@@ -97,6 +118,11 @@ export function CommandPalette() {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const [recents, setRecents] = useState<string[]>([]);
+  const { isSignedIn, getToken } = useAuth();
+  const [found, setFound] = useState<Entry[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchFailed, setSearchFailed] = useState(false);
+  const requestId = useRef(0);
   const [isMac, setIsMac] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -145,15 +171,45 @@ export function CommandPalette() {
     return ENTRIES.map((e) => ({ e, score: rank(q, e) }))
       .filter((r) => r.score >= 0)
       .sort((a, b) => b.score - a.score)
-      .map((r) => ({ e: r.e, section: r.e.group }));
-  }, [query, recents]);
+      .map((r) => ({ e: r.e, section: r.e.group }))
+      .concat(found.map((e) => ({ e, section: e.group })));
+  }, [query, recents, found]);
+
+  // The user's own sheets, documents and chats: debounced, and a newer keystroke makes any
+  // older response stale (compared by request id, since apiFetch has no abort signal).
+  useEffect(() => {
+    const q = query.trim();
+    const id = ++requestId.current;
+    if (!open || !isSignedIn || q.length < 2) {
+      setFound([]);
+      setSearching(false);
+      setSearchFailed(false);
+      return;
+    }
+    setSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await apiFetch<SearchResponse>(`/api/v1/search?q=${encodeURIComponent(q)}`, await getToken());
+        if (id !== requestId.current) return;
+        setFound(toEntries(res));
+        setSearchFailed(false);
+      } catch {
+        if (id !== requestId.current) return;
+        setFound([]);
+        setSearchFailed(true);
+      } finally {
+        if (id === requestId.current) setSearching(false);
+      }
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [query, open, isSignedIn, getToken]);
 
   useEffect(() => {
     listRef.current?.querySelector<HTMLElement>(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" });
   }, [active]);
 
   function choose(e: Entry) {
-    writeRecents([e.id, ...recents.filter((id) => id !== e.id)].slice(0, MAX_RECENTS));
+    if (!e.dynamic) writeRecents([e.id, ...recents.filter((id) => id !== e.id)].slice(0, MAX_RECENTS));
     setOpen(false);
     if (e.run === "buy") openBuy();
     else if (e.href) router.push(e.href);
@@ -229,7 +285,7 @@ export function CommandPalette() {
                     setActive(0);
                   }}
                   onKeyDown={onInputKey}
-                  placeholder="Search pages and actions…"
+                  placeholder="Search pages, actions, sheets, documents and chats…"
                   className="w-full bg-transparent text-[16px] text-(--flow-ink) placeholder:text-(--flow-ink)/40 focus:outline-none"
                 />
                 <kbd className="rounded-md border border-(--flow-ink)/12 px-1.5 py-0.5 text-[11px] text-(--flow-ink)/45">Esc</kbd>
@@ -238,7 +294,7 @@ export function CommandPalette() {
               <div ref={listRef} id="palette-list" role="listbox" className="max-h-[52vh] overflow-y-auto overscroll-contain p-2">
                 {results.length === 0 ? (
                   <p className={cn(Z, "px-4 py-10 text-center text-[24px] leading-snug text-(--flow-ink)/55")}>
-                    Nothing matches “{query.trim()}”
+                    {searching ? "Searching your data…" : `Nothing matches “${query.trim()}”`}
                   </p>
                 ) : (
                   results.map((r, i) => {
@@ -284,6 +340,12 @@ export function CommandPalette() {
                   })
                 )}
               </div>
+
+              {results.length > 0 && (searching || searchFailed) && (
+                <p className="px-5 pb-2 text-[12px] text-(--flow-ink)/50">
+                  {searching ? "Searching your sheets, documents and chats…" : "Couldn’t search your data right now."}
+                </p>
+              )}
 
               <div className="flex items-center gap-4 border-t border-(--flow-ink)/8 px-5 py-2.5 text-[11.5px] text-(--flow-ink)/45">
                 <span>↑↓ to move</span>

@@ -23,6 +23,8 @@ export type DashboardSummary = {
   }[];
   sources: { id: string; name: string; tab_title: string; row_count: number; synced_at: string }[];
   daily_activity: { date: string; connections: number; sources: number; chats: number }[];
+  /** Automation runs from the last `window_days` days, counted by status. */
+  run_overview: { window_days: number; automations: number; by_status: Record<string, number> };
 };
 
 // The KPI cards, activity feed and sources table all read the same summary;
