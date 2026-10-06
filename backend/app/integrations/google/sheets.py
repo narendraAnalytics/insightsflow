@@ -332,3 +332,9 @@ def fetch_sheet_preview(
     # up with the header count for a clean table render.
     padded = [row + [""] * max(0, len(headers) - len(row)) for row in rows]
     return SheetPreview(headers=headers, rows=padded)
+
+
+def revoke_token(token: str) -> None:
+    """Blocking, best effort: tells Google to revoke the grant behind this token (a refresh
+    token revokes the whole grant). Used on data/account deletion; failures never block it."""
+    httpx.post("https://oauth2.googleapis.com/revoke", data={"token": token}, timeout=10.0)

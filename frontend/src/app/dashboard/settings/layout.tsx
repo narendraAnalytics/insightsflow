@@ -8,7 +8,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
           Settings
         </h1>
         <p className="mt-2 font-(family-name:--font-zeyada) text-[26px] leading-snug font-normal text-(--flow-magenta)">
-          Your account, credits and connected apps in one place.
+          Your account, credits, connected apps and data in one place.
         </p>
       </div>
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start">

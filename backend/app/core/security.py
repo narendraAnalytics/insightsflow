@@ -60,3 +60,8 @@ async def get_current_principal(request: Request) -> Principal:
         org_id=payload.get("org_id"),
         org_role=payload.get("org_role"),
     )
+
+
+def clerk_client() -> Clerk:
+    """The shared Clerk Backend API client (account deletion)."""
+    return _get_clerk_client()

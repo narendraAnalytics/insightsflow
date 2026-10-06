@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Coins, Plug, ShieldCheck } from "@phosphor-icons/react";
+import { Coins, Database, Plug, ShieldCheck } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 
 const Z = "font-(family-name:--font-zeyada)";
@@ -11,6 +11,7 @@ const sections = [
   { label: "Profile & security", href: "/dashboard/settings/account", icon: ShieldCheck, accent: "var(--flow-magenta)" },
   { label: "Credits & billing", href: "/dashboard/settings/billing", icon: Coins, accent: "oklch(0.72 0.17 55)" },
   { label: "Connected apps", href: "/dashboard/settings/apps", icon: Plug, accent: "oklch(0.66 0.12 190)" },
+  { label: "Data & privacy", href: "/dashboard/settings/data", icon: Database, accent: "oklch(0.66 0.14 25)" },
 ];
 
 /** Left sub-nav on desktop, a horizontally scrollable pill row on small screens. */
