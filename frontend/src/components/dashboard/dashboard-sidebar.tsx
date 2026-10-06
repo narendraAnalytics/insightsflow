@@ -14,7 +14,6 @@ import {
   Lightning,
   Plug,
   Robot,
-  UsersThree,
 } from "@phosphor-icons/react";
 import { LogoVideo } from "@/components/site/logo-video";
 import { cn } from "@/lib/utils";
@@ -26,7 +25,6 @@ const navItems = [
   { label: "Projects", href: "/dashboard/projects", icon: FolderOpen, accent: "oklch(0.72 0.17 55)" },
   { label: "Integrations", href: "/dashboard/integrations", icon: Plug, accent: "oklch(0.66 0.12 190)" },
   { label: "AI Insights", href: "/dashboard/ai-insights", icon: Robot, accent: "oklch(0.66 0.21 10)" },
-  { label: "Team", href: null, icon: UsersThree, accent: "oklch(0.64 0.22 330)" },
   { label: "Documents", href: "/dashboard/documents", icon: FileText, accent: "var(--flow-coral)" },
   { label: "Automation", href: "/dashboard/automation", icon: Lightning, accent: "oklch(0.78 0.16 80)" },
   { label: "Analytics", href: "/dashboard/analytics", icon: ChartBar, accent: "oklch(0.68 0.15 160)" },
