@@ -6,6 +6,9 @@ app/core/oauth_state.py for why the callback doesn't need a bearer token.
 import uuid
 from datetime import datetime
 
+from urllib.parse import quote
+
+import structlog
 from fastapi import APIRouter, Depends, Path, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
@@ -27,6 +30,7 @@ from app.services import (
     slack_service,
 )
 
+logger = structlog.get_logger(__name__)
 router = APIRouter(prefix="/connections", tags=["connections"])
 
 
@@ -164,6 +168,10 @@ async def google_callback(
         await connection_service.complete_google_connect(db, clerk_user_id, code, code_verifier)
     except connection_service.TooManyAccounts:
         return RedirectResponse(url=f"{base}?sheets_error=limit")
+    except Exception as exc:  # noqa: BLE001 - show the user a reason instead of raw JSON
+        logger.exception("google_sheets_connect_failed", error_type=type(exc).__name__)
+        detail = quote(f"{type(exc).__name__}: {str(exc)[:140]}")
+        return RedirectResponse(url=f"{base}?sheets_error=failed&detail={detail}")
     return RedirectResponse(url=f"{base}?connected=google_sheets")
 
 

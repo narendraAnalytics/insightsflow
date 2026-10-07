@@ -382,7 +382,9 @@ export function GoogleSheetsCard() {
   const [previewSource, setPreviewSource] = useState<DataSource | null>(null);
   const [tabDialog, setTabDialog] = useState<TabDialogState | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
-  const flag = useSearchParams().get("sheets_error");
+  const searchParams = useSearchParams();
+  const flag = searchParams.get("sheets_error");
+  const detail = searchParams.get("detail");
 
   const isConnected = accounts.some((a) => a.status === "connected");
   const several = accounts.length > 1;
@@ -538,11 +540,13 @@ export function GoogleSheetsCard() {
           </div>
         )}
 
-        {(error || actionError || flag === "limit") && (
+        {(error || actionError || flag === "limit" || flag === "failed") && (
           <p role="alert" className="font-(family-name:--font-zeyada) text-[22px] leading-snug font-normal text-(--flow-coral)">
             {actionError ??
               error ??
-              "You've reached the limit of 5 Google accounts for Sheets. Disconnect one first."}
+              (flag === "failed"
+                ? `Couldn't finish connecting Google Sheets. ${detail ?? ""}`.trim()
+                : "You've reached the limit of 5 Google accounts for Sheets. Disconnect one first.")}
           </p>
         )}
       </GlassSlab>
