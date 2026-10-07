@@ -170,7 +170,7 @@ async def google_callback(
         return RedirectResponse(url=f"{base}?sheets_error=limit")
     except Exception as exc:  # noqa: BLE001 - show the user a reason instead of raw JSON
         logger.exception("google_sheets_connect_failed", error_type=type(exc).__name__)
-        detail = quote(f"{type(exc).__name__}: {str(exc)[:140]}")
+        detail = quote(type(exc).__name__[:60])  # class name only; the message stays in the server log
         return RedirectResponse(url=f"{base}?sheets_error=failed&detail={detail}")
     return RedirectResponse(url=f"{base}?connected=google_sheets")
 
