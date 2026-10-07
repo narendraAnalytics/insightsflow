@@ -30,7 +30,7 @@ const columns = [
   },
 ];
 
-const builtWith = ["Google Sheets", "Sarvam-105B", "LangGraph", "Neon Postgres"];
+const builtWith = ["Google Sheets", "Sarvam-105B", "Neon Postgres"];
 
 const WORDMARK = "InsightFlow";
 

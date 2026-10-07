@@ -31,11 +31,23 @@ const REFRESH_MS = 60_000;
 const MAX_ITEMS = 25;
 const RECENT_FAILURE_MS = 7 * 24 * 60 * 60 * 1000;
 
+const READ_IDS_KEY = "insightflow:notifications-read-ids";
+const MAX_READ_IDS = 200;
+
 const readSeen = (): number => {
   try {
     return Number(window.localStorage.getItem(SEEN_KEY)) || 0;
   } catch {
     return 0;
+  }
+};
+
+const readReadIds = (): string[] => {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(READ_IDS_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
   }
 };
 
@@ -51,6 +63,8 @@ export function useNotifications() {
   const [balance, setBalance] = useState<Balance | null>(null);
   const [loading, setLoading] = useState(true);
   const [seen, setSeen] = useState(0);
+  // Actionable alerts the user has dismissed; they come back if the underlying state changes (new id).
+  const [readIds, setReadIds] = useState<string[]>([]);
 
   const refresh = useCallback(async () => {
     if (!isSignedIn) return;
@@ -68,6 +82,7 @@ export function useNotifications() {
 
   useEffect(() => {
     setSeen(readSeen());
+    setReadIds(readReadIds());
   }, []);
 
   useEffect(() => {
@@ -113,7 +128,7 @@ export function useNotifications() {
 
     if (balance && balance.credits < LOW_CREDITS) {
       out.push({
-        id: "low-credits",
+        id: balance.credits <= 0 ? "low-credits-out" : "low-credits-low",
         kind: "low_credits",
         title: balance.credits <= 0 ? "You're out of credits" : "Credits are running low",
         detail: `${balance.credits} left. Buy more to keep asking and connecting.`,
@@ -159,20 +174,42 @@ export function useNotifications() {
   }, [runs, balance, summary]);
 
   const isUnread = useCallback(
-    (n: Notification) => n.actionable || (n.at !== null && new Date(n.at).getTime() > seen),
-    [seen]
+    (n: Notification) =>
+      n.actionable ? !readIds.includes(n.id) : n.at !== null && new Date(n.at).getTime() > seen,
+    [seen, readIds]
   );
   const unread = items.filter(isUnread).length;
+
+  const persistReadIds = (ids: string[]) => {
+    try {
+      window.localStorage.setItem(READ_IDS_KEY, JSON.stringify(ids));
+    } catch {
+      /* private mode: the dot just comes back next visit */
+    }
+  };
 
   const markAllRead = useCallback(() => {
     const now = Date.now();
     setSeen(now);
+    const ids = Array.from(new Set([...readIds, ...items.filter((n) => n.actionable).map((n) => n.id)])).slice(-MAX_READ_IDS);
+    setReadIds(ids);
     try {
       window.localStorage.setItem(SEEN_KEY, String(now));
     } catch {
-      /* private mode: the dot just comes back next visit */
+      /* private mode */
     }
-  }, []);
+    persistReadIds(ids);
+  }, [items, readIds]);
 
-  return { items, unread, isUnread, loading, refresh, markAllRead };
+  const markRead = useCallback(
+    (n: Notification) => {
+      if (!n.actionable || readIds.includes(n.id)) return;
+      const ids = [...readIds, n.id].slice(-MAX_READ_IDS);
+      setReadIds(ids);
+      persistReadIds(ids);
+    },
+    [readIds]
+  );
+
+  return { items, unread, isUnread, loading, refresh, markAllRead, markRead };
 }

@@ -1,6 +1,6 @@
 import type { ComponentType, SVGProps } from "react";
 import type { Icon } from "@phosphor-icons/react";
-import { Brain, ChartBar, CreditCard, Database, Graph, LockKey } from "@phosphor-icons/react/dist/ssr";
+import { Brain, ChartBar, CreditCard, Database, LockKey } from "@phosphor-icons/react/dist/ssr";
 import { GoogleSheetsGlyph, NotionGlyph, SlackGlyph } from "@/components/site/brand-icons";
 
 type Item =
@@ -11,7 +11,6 @@ type Item =
 const stack: Item[] = [
   { brand: GoogleSheetsGlyph, label: "Google Sheets", note: "live" },
   { icon: Brain, label: "Sarvam-105B", color: "var(--flow-magenta)" },
-  { icon: Graph, label: "LangGraph", color: "var(--flow-coral)" },
   { icon: ChartBar, label: "pandas", color: "var(--flow-amber)" },
   { icon: Database, label: "Neon Postgres", color: "var(--flow-mint)" },
   { icon: LockKey, label: "Clerk", color: "var(--flow-magenta)" },

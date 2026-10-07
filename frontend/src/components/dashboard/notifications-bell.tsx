@@ -61,7 +61,7 @@ const ACTION: Partial<Record<Notification["kind"], string>> = {
 };
 
 export function NotificationsBell() {
-  const { items, unread, isUnread, loading, markAllRead } = useNotifications();
+  const { items, unread, isUnread, loading, markAllRead, markRead } = useNotifications();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -183,7 +183,7 @@ export function NotificationsBell() {
                     return (
                       <li key={n.id}>
                         {n.href ? (
-                          <Link href={n.href} onClick={() => setOpen(false)} className={cls}>
+                          <Link href={n.href} onClick={() => { markRead(n); setOpen(false); }} className={cls}>
                             {body}
                           </Link>
                         ) : (
