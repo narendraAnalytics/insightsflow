@@ -1,0 +1,37 @@
+{
+  "intro": {
+    "file": "voice/intro.mp3",
+    "seconds": 3.36,
+    "text": "Your sheets already know the answers."
+  },
+  "s1": {
+    "file": "voice/s1.mp3",
+    "seconds": 6.816,
+    "text": "Meet InsightFlow. An AI analyst that reads your sheets and documents."
+  },
+  "s2": {
+    "file": "voice/s2.mp3",
+    "seconds": 7.128,
+    "text": "Connect a Google Sheet in seconds. Gmail, Slack and Notion join in one click."
+  },
+  "s3": {
+    "file": "voice/s3.mp3",
+    "seconds": 7.656,
+    "text": "Ask in plain words. Every number is calculated by code, then spelled out for you."
+  },
+  "s4": {
+    "file": "voice/s4.mp3",
+    "seconds": 7.992,
+    "text": "It drafts the email, Slack post, or Notion page. Nothing goes out until you approve."
+  },
+  "s5": {
+    "file": "voice/s5.mp3",
+    "seconds": 4.992,
+    "text": "Even PDFs and invoices turn into rows you can question."
+  },
+  "outro": {
+    "file": "voice/outro.mp3",
+    "seconds": 6.432,
+    "text": "Ask your first question today. insightsflow.vercel.app"
+  }
+}
