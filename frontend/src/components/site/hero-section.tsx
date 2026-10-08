@@ -13,11 +13,12 @@ import {
   type Variants,
 } from "framer-motion";
 import Lenis from "lenis";
-import { ArrowDown, ArrowRight, ArrowUpRight } from "@phosphor-icons/react";
+import { ArrowRight, ArrowUpRight, Play } from "@phosphor-icons/react";
 import { Show, SignUpButton, useUser } from "@clerk/nextjs";
 import { cn } from "@/lib/utils";
 import { EASE_OUT } from "@/lib/motion";
 import { GoogleSheetsGlyph, NotionGlyph, SlackGlyph } from "@/components/site/brand-icons";
+import { DemoVideoModal } from "@/components/site/demo-video-modal";
 import { HeroCanvas } from "@/components/site/hero-canvas";
 import { CHAPTERS, type Chapter } from "@/components/site/hero-chapters";
 import { Magnetic, primaryButtonClass, secondaryButtonClass } from "@/components/site/primitives";
@@ -140,6 +141,7 @@ function ChapterCounter({ active }: { active: number }) {
 }
 
 function HeroCtas({ displayName }: { displayName: string }) {
+  const [demoOpen, setDemoOpen] = useState(false);
   return (
     <div className="flex flex-wrap items-center gap-3">
       <Show when="signed-out">
@@ -160,10 +162,15 @@ function HeroCtas({ displayName }: { displayName: string }) {
           </a>
         </Magnetic>
       </Show>
-      <a href="#how-it-works" className={cn(secondaryButtonClass, "px-6 py-3.5 text-[16px]")}>
+      <button
+        type="button"
+        onClick={() => setDemoOpen(true)}
+        className={cn(secondaryButtonClass, "px-6 py-3.5 text-[16px]")}
+      >
         See how it works
-        <ArrowDown weight="bold" className="size-4 transition-transform duration-200 group-hover:translate-y-0.5" />
-      </a>
+        <Play weight="fill" className="size-4 transition-transform duration-200 group-hover:scale-110" />
+      </button>
+      <DemoVideoModal open={demoOpen} onOpenChange={setDemoOpen} />
     </div>
   );
 }
